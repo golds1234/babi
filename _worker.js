@@ -1,2464 +1,1314 @@
-// <!--GAMFC-->version base on commit 43fad05dcdae3b723c53c226f8181fc5bd47223e, time is 2023-06-22 15:20:02 UTC<!--GAMFC-END-->.
 // @ts-ignore
-import { connect } from "cloudflare:sockets";
+import { connect } from 'cloudflare:sockets';
 
-// How to generate your own UUID:
-// [Windows] Press "Win + R", input cmd and run:  Powershell -NoExit -Command "[guid]::NewGuid()"
-let userID = "86c50e3a-5b87-49dd-bd20-03c7f2735e40";
+// --- Konfigurasi Awal ---
 
-const proxyIPs = ["ts.hpc.tw"]; 
-const cn_hostnames = [''];
-let CDNIP = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d\u002e\u0073\u0067'
-// http_ip
-let IP1 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d'
-let IP2 = '\u0063\u0069\u0073\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d'
-let IP3 = '\u0061\u0066\u0072\u0069\u0063\u0061\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d'
-let IP4 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d\u002e\u0073\u0067'
-let IP5 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u0065\u0075\u0072\u006f\u0070\u0065\u002e\u0061\u0074'
-let IP6 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d\u002e\u006d\u0074'
-let IP7 = '\u0071\u0061\u002e\u0076\u0069\u0073\u0061\u006d\u0069\u0064\u0064\u006c\u0065\u0065\u0061\u0073\u0074\u002e\u0063\u006f\u006d'
+// Default User ID (sebaiknya diatur melalui Environment Variable 'UUID')
+// Cara generate UUID Anda sendiri:
+// [Windows] Tekan "Win + R", ketik cmd, jalankan: Powershell -NoExit -Command "[guid]::NewGuid()"
+let userID = 'd342d11e-d424-4583-b36e-524ab1f0afa4'; // Contoh UUID
 
-// https_ip
-let IP8 = '\u0075\u0073\u0061\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d'
-let IP9 = '\u006d\u0079\u0061\u006e\u006d\u0061\u0072\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d'
-let IP10 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d\u002e\u0074\u0077'
-let IP11 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u0065\u0075\u0072\u006f\u0070\u0065\u002e\u0063\u0068'
-let IP12 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u002e\u0063\u006f\u006d\u002e\u0062\u0072'
-let IP13 = '\u0077\u0077\u0077\u002e\u0076\u0069\u0073\u0061\u0073\u006f\u0075\u0074\u0068\u0065\u0061\u0073\u0074\u0065\u0075\u0072\u006f\u0070\u0065\u002e\u0063\u006f\u006d'
+// Daftar Proxy IP Default (bisa di-override dengan Environment Variable 'PROXY_IP')
+// Digunakan untuk fallback jika koneksi langsung gagal atau untuk menyediakan alternatif
+// Contoh: 'cdn.xn--b6gac.eu.org' atau domain/IP lain yang mengarah ke worker Anda.
+//             Sangat disarankan *tidak* menggunakan domain pihak ketiga acak
+//             kecuali Anda mengontrolnya atau tahu persis perilakunya.
+const defaultProxyIPs = ['cdn.xn--b6gac.eu.org']; // Contoh: IP/Domain CDN Anda
 
-// http_port
-let PT1 = '80'
-let PT2 = '8080'
-let PT3 = '8880'
-let PT4 = '2052'
-let PT5 = '2082'
-let PT6 = '2086'
-let PT7 = '2095'
+// URL Default untuk DNS over HTTPS (DoH) untuk proxy UDP (port 53)
+// Bisa di-override dengan Environment Variable 'DNS_RESOLVER_URL'
+let dohURL = 'https://cloudflare-dns.com/dns-query'; // Cloudflare sebagai default
+// Alternatif lain: 'https://dns.google/dns-query'
 
-// https_port
-let PT8 = '443'
-let PT9 = '8443'
-let PT10 = '2053'
-let PT11 = '2083'
-let PT12 = '2087'
-let PT13 = '2096'
+// Pilihan Proxy IP: Ambil dari env atau pilih secara acak dari default
+let proxyIP = defaultProxyIPs[Math.floor(Math.random() * defaultProxyIPs.length)];
 
-let proxyIP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
-let proxyPort = proxyIP.includes(':') ? proxyIP.split(':')[1] : '443';
-const dohURL = "https://cloudflare-dns.com/dns-query";
+// Daftar port standard untuk VLESS over WS (non-TLS)
+const httpPorts = new Set([80, 8080, 8880, 2052, 2086, 2095, 2082]);
+// Daftar port standard untuk VLESS over WSS (TLS)
+const httpsPorts = new Set([443, 8443, 2053, 2096, 2087, 2083]);
+
+// Daftar hostname target untuk fitur reverse proxy di default route (PERHATIAN: Gunakan dengan hati-hati!)
+// Ini akan meneruskan request yang tidak cocok dengan path lain ke salah satu host ini.
+// Sebaiknya gunakan domain yang Anda kontrol atau pahami sepenuhnya.
+const fallbackProxyHostnames = ['www.wikipedia.org']; // Contoh, lebih aman daripada domain acak
+
+// --- Validasi Awal ---
+
+// Periksa apakah UUID default valid (ini hanya pemeriksaan saat skrip dimuat)
 if (!isValidUUID(userID)) {
-  throw new Error("uuid is not valid");
+	throw new Error('Default User ID is invalid');
 }
+
+// --- Logic Utama Worker ---
 
 export default {
-  /**
-   * @param {any} request
-   * @param {{uuid: string, proxyip: string, cdnip: string, ip1: string, ip2: string, ip3: string, ip4: string, ip5: string, ip6: string, ip7: string, ip8: string, ip9: string, ip10: string, ip11: string, ip12: string, ip13: string, pt1: string, pt2: string, pt3: string, pt4: string, pt5: string, pt6: string, pt7: string, pt8: string, pt9: string, pt10: string, pt11: string, pt12: string, pt13: string}} env
-   * @param {any} ctx
-   * @returns {Promise<Response>}
-   */
-  async fetch(request, env, ctx) {
-    try {
-      const { proxyip } = env;
-      userID = env.uuid || userID;
-			if (proxyip) {
-				if (proxyip.includes(']:')) {
-					let lastColonIndex = proxyip.lastIndexOf(':');
-					proxyPort = proxyip.slice(lastColonIndex + 1);
-					proxyIP = proxyip.slice(0, lastColonIndex);
-					
-				} else if (!proxyip.includes(']:') && !proxyip.includes(']')) {
-					[proxyIP, proxyPort = '443'] = proxyip.split(':');
-				} else {
-					proxyPort = '443';
-					proxyIP = proxyip;
-				}				
+	/**
+	 * Handler utama untuk setiap fetch request yang masuk ke worker.
+	 * @param {import("@cloudflare/workers-types").Request} request - Request yang masuk.
+	 * @param {object} env - Environment variables yang disediakan Cloudflare.
+	 * @param {string} [env.UUID] - User ID (atau beberapa ID dipisahkan koma) dari environment.
+	 * @param {string} [env.PROXY_IP] - Proxy IP (atau beberapa IP dipisahkan koma) dari environment.
+	 * @param {string} [env.DNS_RESOLVER_URL] - URL DoH dari environment.
+	 * @param {import("@cloudflare/workers-types").ExecutionContext} ctx - Execution context.
+	 * @returns {Promise<Response>} Response yang akan dikirim kembali ke client.
+	 */
+	async fetch(request, env, ctx) {
+		try {
+			// Prioritaskan konfigurasi dari Environment Variables
+			userID = env.UUID || userID;
+			proxyIP = env.PROXY_IP || proxyIP; // Jika env.PROXY_IP ada, gunakan itu, jika tidak gunakan nilai sebelumnya (acak atau default tunggal)
+			dohURL = env.DNS_RESOLVER_URL || dohURL;
+
+			// Ambil UUID pertama jika ada beberapa, untuk digunakan di path URL
+			let firstUserID = userID.includes(',') ? userID.split(',')[0].trim() : userID;
+
+			// Validasi lagi UUID dari env jika ada (opsional tapi bagus untuk keamanan)
+			if (!userID.split(',').every(id => isValidUUID(id.trim()))) {
+				console.error('Invalid UUID detected in environment or default configuration.');
+				return new Response('Invalid UUID configuration', { status: 400 });
+			}
+
+			const upgradeHeader = request.headers.get('Upgrade');
+
+			// Jika bukan request WebSocket upgrade
+			if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+				const url = new URL(request.url);
+				const host = request.headers.get('Host');
+
+				switch (url.pathname) {
+					case `/cf`: // Endpoint untuk info Cloudflare
+						return new Response(JSON.stringify(request.cf, null, 4), {
+							status: 200,
+							headers: { "Content-Type": "application/json;charset=utf-8" },
+						});
+
+					case `/${firstUserID}`: // Endpoint untuk menampilkan konfigurasi VLESS dalam HTML
+						if (!host) {
+							return new Response("Host header is missing", { status: 400 });
+						}
+						const vlessConfig = getVlessConfig(userID, host, proxyIP);
+						return new Response(vlessConfig, {
+							status: 200,
+							headers: { "Content-Type": "text/html; charset=utf-8" },
+						});
+
+					case `/sub/${firstUserID}`: // Endpoint untuk langganan (subscription) VLESS
+						if (!host) {
+							return new Response("Host header is missing", { status: 400 });
+						}
+						// const format = url.searchParams.get('format'); // Potensial untuk format lain (clash, etc.)
+						const vlessSub = generateVlessSubscription(userID, host, proxyIP);
+						return new Response(btoa(vlessSub), { // Encode Base64
+							status: 200,
+							headers: { "Content-Type": "text/plain;charset=utf-8" },
+						});
+
+					case `/bestip/${firstUserID}`: // Endpoint eksternal untuk IP terbaik (hati-hati dengan dependensi eksternal)
+						// Catatan: Fungsionalitas ini bergantung pada layanan eksternal "sub.xf.free.hr".
+						// Pastikan Anda mempercayai layanan ini dan sadar akan potensi downtime atau perubahan.
+						const bestIpUrl = `https://sub.xf.free.hr/auto?host=${request.headers.get('Host')}&uuid=${userID}&path=/`;
+						try {
+							const bestSubResponse = await fetch(bestIpUrl, { headers: request.headers });
+							// Periksa status response dari layanan eksternal
+							if (!bestSubResponse.ok) {
+								console.error(`Error fetching bestip from ${bestIpUrl}: ${bestSubResponse.status} ${bestSubResponse.statusText}`);
+								// Mungkin kembalikan error atau fallback ke langganan biasa?
+								// return new Response(`Failed to fetch best IP: ${bestSubResponse.statusText}`, { status: bestSubResponse.status });
+								// Fallback: return subscription biasa
+								const vlessSubFallback = generateVlessSubscription(userID, request.headers.get('Host') || '', proxyIP);
+								return new Response(btoa(vlessSubFallback), { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8", "X-Fallback-Used": "true" } });
+
+							}
+							return bestSubResponse;
+						} catch (fetchError) {
+							console.error(`Network error fetching bestip from ${bestIpUrl}:`, fetchError);
+							// return new Response('Failed to fetch best IP due to network error', { status: 503 });
+                             // Fallback: return subscription biasa
+                            const vlessSubFallback = generateVlessSubscription(userID, request.headers.get('Host') || '', proxyIP);
+                            return new Response(btoa(vlessSubFallback), { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8", "X-Fallback-Used": "true" } });
+						}
+
+
+					default: // Semua path lain: Reverse Proxy ke Hostname Fallback
+						// PERHATIAN: Fitur ini meneruskan request ke website eksternal.
+						// Ini bisa digunakan untuk menyamarkan traffic, tapi juga memiliki risiko keamanan
+						// dan mungkin melanggar ToS Cloudflare jika disalahgunakan.
+						// Gunakan hanya jika Anda tahu apa yang Anda lakukan.
+						const randomHostname = fallbackProxyHostnames[Math.floor(Math.random() * fallbackProxyHostnames.length)];
+						const proxyUrl = `https://${randomHostname}${url.pathname}${url.search}`;
+
+						// Salin headers asli, tapi modifikasi beberapa untuk menyembunyikan asal
+						const newHeaders = new Headers(request.headers);
+						newHeaders.set('cf-connecting-ip', '1.2.3.4'); // Contoh IP palsu
+						newHeaders.set('x-forwarded-for', '1.2.3.4');  // Contoh IP palsu
+						newHeaders.set('x-real-ip', '1.2.3.4');       // Contoh IP palsu
+						newHeaders.set('referer', `https://www.google.com/search?q=${randomHostname}`); // Referer palsu
+						newHeaders.set('Host', randomHostname); // Set Host header ke target
+
+						let modifiedRequest = new Request(proxyUrl, {
+							method: request.method,
+							headers: newHeaders,
+							body: request.body,
+							redirect: 'manual', // Penting: Jangan ikuti redirect dari target secara otomatis
+						});
+
+						try {
+							const proxyResponse = await fetch(modifiedRequest, { redirect: 'manual' });
+
+							// Blokir jika target mengembalikan redirect (301, 302, 307, 308)
+							if ([301, 302, 307, 308].includes(proxyResponse.status)) {
+								console.warn(`Blocked redirect attempt from ${randomHostname} to ${proxyResponse.headers.get('Location')}`);
+								return new Response(`Redirects from ${randomHostname} are not allowed.`, {
+									status: 403,
+									statusText: 'Forbidden',
+								});
+							}
+
+							// Kembalikan response dari target
+                            // Kita perlu membuat Headers baru karena Headers dari Response tidak bisa dimodifikasi langsung di beberapa kasus
+                            let responseHeaders = new Headers(proxyResponse.headers);
+                            responseHeaders.set('Access-Control-Allow-Origin', '*'); // Contoh: Tambahkan CORS header jika perlu
+                            responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+
+
+							return new Response(proxyResponse.body, {
+                                status: proxyResponse.status,
+                                statusText: proxyResponse.statusText,
+                                headers: responseHeaders
+                            });
+						} catch (proxyError) {
+							console.error(`Error during fallback reverse proxy to ${proxyUrl}:`, proxyError);
+							return new Response('Fallback proxy failed', { status: 502 });
+						}
+				}
 			} else {
-				if (proxyIP.includes(']:')) {
-					let lastColonIndex = proxyIP.lastIndexOf(':');
-					proxyPort = proxyIP.slice(lastColonIndex + 1);
-					proxyIP = proxyIP.slice(0, lastColonIndex);	
-				} else if (!proxyIP.includes(']:') && !proxyIP.includes(']')) {
-					[proxyIP, proxyPort = '443'] = proxyIP.split(':');
-				} else {
-					proxyPort = '443';
-				}	
+				// Handle permintaan WebSocket upgrade
+				return await handleVlessOverWebSocket(request, userID, proxyIP, dohURL);
 			}
-			console.log('ProxyIP:', proxyIP);
-			console.log('ProxyPort:', proxyPort);
-      CDNIP = env.cdnip || CDNIP;
-	  IP1 = env.ip1 || IP1;
-	  IP2 = env.ip2 || IP2;
-	  IP3 = env.ip3 || IP3;
-	  IP4 = env.ip4 || IP4;
-	  IP5 = env.ip5 || IP5;
-	  IP6 = env.ip6 || IP6;
-	  IP7 = env.ip7 || IP7;
-	  IP8 = env.ip8 || IP8;
-	  IP9 = env.ip9 || IP9;
-	  IP10 = env.ip10 || IP10;
-	  IP11 = env.ip11 || IP11;
-	  IP12 = env.ip12 || IP12;
-	  IP13 = env.ip13 || IP13;
-	  PT1 = env.pt1 || PT1;
-	  PT2 = env.pt2 || PT2;
-	  PT3 = env.pt3 || PT3;
-	  PT4 = env.pt4 || PT4;
-	  PT5 = env.pt5 || PT5;
-	  PT6 = env.pt6 || PT6;
-	  PT7 = env.pt7 || PT7;
-	  PT8 = env.pt8 || PT8;
-	  PT9 = env.pt9 || PT9;
-	  PT10 = env.pt10 || PT10;
-	  PT11 = env.pt11 || PT11;
-	  PT12 = env.pt12 || PT12;
-	  PT13 = env.pt13 || PT13;
-      const upgradeHeader = request.headers.get("Upgrade");
-      const url = new URL(request.url);
-      if (!upgradeHeader || upgradeHeader !== "websocket") {
-        const url = new URL(request.url);
-        switch (url.pathname) {
-          case `/${userID}`: {
-            const \u0076\u006c\u0065\u0073\u0073Config = get\u0076\u006c\u0065\u0073\u0073Config(userID, request.headers.get("Host"));
-            return new Response(`${\u0076\u006c\u0065\u0073\u0073Config}`, {
-              status: 200,
-              headers: {
-                "Content-Type": "text/html;charset=utf-8",
-              },
-            });
-          }
-		  case `/${userID}/ty`: {
-			const tyConfig = gettyConfig(userID, request.headers.get('Host'));
-			return new Response(`${tyConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "text/plain;charset=utf-8",
-				}
-			});
+		} catch (err) {
+			console.error("Unhandled error in fetch handler:", err);
+			/** @type {Error} */ let e = err;
+			return new Response(e.toString(), { status: 500 });
 		}
-		case `/${userID}/cl`: {
-			const clConfig = getclConfig(userID, request.headers.get('Host'));
-			return new Response(`${clConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "text/plain;charset=utf-8",
-				}
-			});
-		}
-		case `/${userID}/sb`: {
-			const sbConfig = getsbConfig(userID, request.headers.get('Host'));
-			return new Response(`${sbConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "application/json;charset=utf-8",
-				}
-			});
-		}
-		case `/${userID}/pty`: {
-			const ptyConfig = getptyConfig(userID, request.headers.get('Host'));
-			return new Response(`${ptyConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "text/plain;charset=utf-8",
-				}
-			});
-		}
-		case `/${userID}/pcl`: {
-			const pclConfig = getpclConfig(userID, request.headers.get('Host'));
-			return new Response(`${pclConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "text/plain;charset=utf-8",
-				}
-			});
-		}
-		case `/${userID}/psb`: {
-			const psbConfig = getpsbConfig(userID, request.headers.get('Host'));
-			return new Response(`${psbConfig}`, {
-				status: 200,
-				headers: {
-					"Content-Type": "application/json;charset=utf-8",
-				}
-			});
-		}
-          default:
-            // return new Response('Not found', { status: 404 });
-            // For any other path, reverse proxy to 'ramdom website' and return the original response, caching it in the process
-            if (cn_hostnames.includes('')) {
-            return new Response(JSON.stringify(request.cf, null, 4), {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json;charset=utf-8",
-              },
-            });
-            }
-            const randomHostname = cn_hostnames[Math.floor(Math.random() * cn_hostnames.length)];
-            const newHeaders = new Headers(request.headers);
-            newHeaders.set("cf-connecting-ip", "1.2.3.4");
-            newHeaders.set("x-forwarded-for", "1.2.3.4");
-            newHeaders.set("x-real-ip", "1.2.3.4");
-            newHeaders.set("referer", "https://www.google.com/search?q=edtunnel");
-            // Use fetch to proxy the request to 15 different domains
-            const proxyUrl = "https://" + randomHostname + url.pathname + url.search;
-            let modifiedRequest = new Request(proxyUrl, {
-              method: request.method,
-              headers: newHeaders,
-              body: request.body,
-              redirect: "manual",
-            });
-            const proxyResponse = await fetch(modifiedRequest, { redirect: "manual" });
-            // Check for 302 or 301 redirect status and return an error response
-            if ([301, 302].includes(proxyResponse.status)) {
-              return new Response(`Redirects to ${randomHostname} are not allowed.`, {
-                status: 403,
-                statusText: "Forbidden",
-              });
-            }
-            // Return the response from the proxy server
-            return proxyResponse;
-        }
-      } else {
-			if(url.pathname.includes('/pyip='))
-			{
-				const tmp_ip=url.pathname.split("=")[1];
-				if(isValidIP(tmp_ip))
-				{
-					proxyIP=tmp_ip;
-					if (proxyIP.includes(']:')) {
-						let lastColonIndex = proxyIP.lastIndexOf(':');
-						proxyPort = proxyIP.slice(lastColonIndex + 1);
-						proxyIP = proxyIP.slice(0, lastColonIndex);	
-					} else if (!proxyIP.includes(']:') && !proxyIP.includes(']')) {
-						[proxyIP, proxyPort = '443'] = proxyIP.split(':');
-					} else {
-						proxyPort = '443';
-					}
-				}	
-			}
-        return await \u0076\u006c\u0065\u0073\u0073OverWSHandler(request);
-		}
-    } catch (err) {
-      /** @type {Error} */ let e = err;
-      return new Response(e.toString());
-    }
-  },
+	},
 };
 
-function isValidIP(ip) {
-    var reg = /^[\s\S]*$/;
-    return reg.test(ip);
+/*
+// Fungsi ini tampaknya tidak lengkap atau tidak digunakan secara aktif.
+// Tujuannya mungkin untuk validasi subdomain berdasarkan hash tanggal/waktu.
+// Dikomentari untuk saat ini. Jika ingin digunakan, perlu disempurnakan dan diintegrasikan.
+async function uuid_validator(request) {
+	const hostname = request.headers.get('Host');
+	if (!hostname) return;
+	const currentDate = new Date();
+
+	const subdomain = hostname.split('.')[0];
+	const year = currentDate.getFullYear();
+	const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+	const day = String(currentDate.getDate()).padStart(2, '0');
+
+	const formattedDate = `${year}-${month}-${day}`;
+
+	// const daliy_sub = formattedDate + subdomain
+	const hashHex = await hashSHA256(subdomain);
+	// subdomain string contains timestamps utc and uuid string TODO.
+	console.log(`SHA256('${subdomain}') = ${hashHex}, Date: ${formattedDate}`);
+}
+
+async function hashSHA256(string) {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(string);
+	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+	const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+	return hashHex;
+}
+*/
+
+/**
+ * Menangani koneksi VLESS over WebSocket.
+ * @param {import("@cloudflare/workers-types").Request} request - Request WebSocket upgrade.
+ * @param {string} configuredUserID - UUID atau daftar UUID yang dikonfigurasi.
+ * @param {string} configuredProxyIP - Proxy IP yang dikonfigurasi.
+ * @param {string} configuredDohURL - URL DoH yang dikonfigurasi.
+ * @returns {Promise<Response>} Response WebSocket (status 101) atau error.
+ */
+async function handleVlessOverWebSocket(request, configuredUserID, configuredProxyIP, configuredDohURL) {
+	const webSocketPair = new WebSocketPair();
+	const [client, server] = Object.values(webSocketPair);
+
+	server.accept(); // Terima koneksi WebSocket dari sisi server worker
+
+	let connectionState = {
+		userID: configuredUserID,
+		proxyIP: configuredProxyIP,
+		dohURL: configuredDohURL,
+		address: '', // Alamat tujuan yang diminta client
+		port: 0,     // Port tujuan yang diminta client
+		protocol: '', // Protokol (tcp/udp)
+		remoteSocket: null, // Socket TCP ke tujuan
+		udpStreamWriter: null, // Writer untuk stream UDP (via DoH)
+		isDnsRequest: false,   // Apakah ini request UDP ke port 53
+	};
+
+	const log = (/** @type {string} */ info, /** @type {string | undefined | Error} */ event) => {
+		const timestamp = new Date().toISOString();
+		console.log(`[${timestamp} ${connectionState.address}:${connectionState.port || 'init'} ${connectionState.protocol || ''}] ${info}`, event || '');
+	};
+
+	try {
+		const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
+		const readableWebSocketStream = makeReadableWebSocketStream(server, earlyDataHeader, log);
+
+		await readableWebSocketStream.pipeTo(new WritableStream({
+			async write(chunk, controller) {
+				// Jika ini adalah request DNS yang sudah diidentifikasi, teruskan ke handler UDP
+				if (connectionState.isDnsRequest && connectionState.udpStreamWriter) {
+					return connectionState.udpStreamWriter(chunk);
+				}
+
+				// Jika socket remote TCP sudah dibuat, tulis langsung ke sana
+				if (connectionState.remoteSocket) {
+					try {
+						const writer = connectionState.remoteSocket.writable.getWriter();
+						await writer.write(chunk);
+						writer.releaseLock();
+						return;
+					} catch (writeError) {
+						log('Error writing to remote TCP socket:', writeError);
+						controller.error(writeError); // Hentikan stream jika penulisan gagal
+                        safeCloseWebSocket(server); // Tutup WebSocket juga
+						return;
+					}
+				}
+
+				// Jika belum ada socket remote, proses header VLESS dari chunk pertama
+				const {
+					hasError,
+					errorReason,
+					addressRemote = '',
+					portRemote = 0,
+					rawDataIndex = 0,
+					vlessVersion = new Uint8Array([0, 0]),
+					isUDP = false,
+				} = processVlessHeader(chunk, connectionState.userID);
+
+				if (hasError) {
+					log('VLESS header processing error:', errorReason);
+					controller.error(new Error(errorReason)); // Hentikan stream
+                    safeCloseWebSocket(server); // Pastikan WS ditutup
+					return; // Hentikan pemrosesan lebih lanjut
+				}
+
+				// Simpan detail koneksi yang diminta client
+				connectionState.address = addressRemote;
+				connectionState.port = portRemote;
+				connectionState.protocol = isUDP ? 'udp' : 'tcp';
+
+				log(`Request parsed: Target ${addressRemote}:${portRemote} (${connectionState.protocol})`);
+
+				// Proses hanya UDP untuk port 53 (DNS)
+				if (isUDP) {
+					if (portRemote !== 53) {
+						const errMsg = 'UDP proxy is only enabled for DNS requests on port 53.';
+						log('Error:', errMsg);
+						controller.error(new Error(errMsg));
+                        safeCloseWebSocket(server);
+						return;
+					}
+					connectionState.isDnsRequest = true;
+				}
+
+				// Header response VLESS (Version 0, No Error)
+				const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
+				const clientInitialData = chunk.slice(rawDataIndex);
+
+				// --- Handling Koneksi Keluar (Outbound) ---
+				if (connectionState.isDnsRequest) {
+					// Handle UDP (DNS via DoH)
+					try {
+                        const { write } = await handleUdpOverDoH(server, vlessResponseHeader, connectionState.dohURL, log);
+                        connectionState.udpStreamWriter = write; // Simpan fungsi write
+                        connectionState.udpStreamWriter(clientInitialData); // Tulis data awal client
+                        log('UDP (DoH) handler initialized.');
+                    } catch (udpError) {
+                        log('Error initializing UDP (DoH) handler:', udpError);
+                        controller.error(udpError);
+                        safeCloseWebSocket(server);
+                    }
+				} else {
+					// Handle TCP
+                    try {
+                        await handleTcpOutbound(connectionState, clientInitialData, server, vlessResponseHeader, log);
+                        log(`TCP connection handler initiated for ${connectionState.address}:${connectionState.port}.`);
+                    } catch (tcpError) {
+                        log(`Error initializing TCP outbound connection to ${connectionState.address}:${connectionState.port}:`, tcpError);
+                        controller.error(tcpError);
+                        safeCloseWebSocket(server);
+                    }
+				}
+			},
+			close() {
+				log('Client WebSocket stream closed.');
+                // Jika ada socket remote TCP, pastikan juga ditutup
+                if (connectionState.remoteSocket) {
+                    try {
+                       connectionState.remoteSocket.close();
+                    } catch (closeErr) {
+                       log('Error closing remote TCP socket on client WS close:', closeErr);
+                    }
+                }
+			},
+			abort(reason) {
+				log('Client WebSocket stream aborted:', reason);
+                // Jika ada socket remote TCP, pastikan juga ditutup
+                 if (connectionState.remoteSocket) {
+                    try {
+                       connectionState.remoteSocket.close();
+                    } catch (closeErr) {
+                       log('Error closing remote TCP socket on client WS abort:', closeErr);
+                    }
+                }
+			},
+		}), { preventCancel: false }); // preventCancel: false memungkinkan error untuk membatalkan pipe
+
+	} catch (error) {
+        // Tangkap error dari pipeTo atau stream creation
+		log('Error in WebSocket handling pipeline:', error);
+		safeCloseWebSocket(server); // Pastikan server ditutup jika terjadi error tak terduga
+	}
+
+
+	// Kembalikan response 101 Switching Protocols dengan sisi client dari WebSocketPair
+	return new Response(null, {
+		status: 101,
+		webSocket: client,
+	});
 }
 
 /**
- *
- * @param {any} request
+ * Menangani koneksi TCP keluar ke tujuan yang diminta.
+ * Mencoba koneksi langsung, lalu fallback ke Proxy IP jika gagal atau tidak ada data.
+ * @param {object} connectionState - Objek state koneksi saat ini.
+ * @param {Uint8Array} rawClientData - Data awal dari client setelah header VLESS.
+ * @param {import("@cloudflare/workers-types").WebSocket} webSocket - WebSocket server untuk komunikasi dua arah.
+ * @param {Uint8Array} vlessResponseHeader - Header VLESS untuk dikirim ke client jika koneksi berhasil.
+ * @param {function} log - Fungsi logging.
  */
-async function \u0076\u006c\u0065\u0073\u0073OverWSHandler(request) {
-  /** @type {any} */
-  // @ts-ignore
-  const webSocketPair = new WebSocketPair();
-  const [client, webSocket] = Object.values(webSocketPair);
+async function handleTcpOutbound(connectionState, rawClientData, webSocket, vlessResponseHeader, log) {
+    let retried = false;
 
-  webSocket.accept();
+	/**
+	 * Fungsi internal untuk membuat koneksi TCP dan menulis data awal.
+     * @param {string} address - Alamat tujuan.
+     * @param {number} port - Port tujuan.
+     * @param {boolean} isRetry - Menandakan apakah ini upaya retry.
+	 * @returns {Promise<import("@cloudflare/workers-types").Socket>} Socket yang berhasil terkoneksi.
+	 */
+	async function connectAndWrite(address, port, isRetry = false) {
+        log(`Attempting ${isRetry ? 'retry ' : ''}TCP connection to ${address}:${port}...`);
+		/** @type {import("@cloudflare/workers-types").Socket} */
+        let tcpSocket;
+        try {
+             tcpSocket = connect({ hostname: address, port: port });
+             connectionState.remoteSocket = tcpSocket; // Simpan socket ke state
+             log(`Successfully initiated TCP connection to ${address}:${port}. Socket state: ${tcpSocket.readyState}`);
+        } catch (connectionError) {
+             log(`Failed to initiate TCP connection to ${address}:${port}:`, connectionError);
+             throw connectionError; // Leparkan error agar bisa ditangani oleh pemanggil
+        }
 
-  let address = "";
-  let portWithRandomLog = "";
-  const log = (/** @type {string} */ info, /** @type {string | undefined} */ event) => {
-    console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
-  };
-  const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
 
-  const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
-
-  /** @type {{ value: any | null }} */
-  let remoteSocketWapper = {
-    value: null,
-  };
-  let udpStreamWrite = null;
-  let isDns = false;
-
-  // ws --> remote
-  readableWebSocketStream
-    .pipeTo(
-      new WritableStream({
-        async write(chunk, controller) {
-          if (isDns && udpStreamWrite) {
-            return udpStreamWrite(chunk);
-          }
-          if (remoteSocketWapper.value) {
-            const writer = remoteSocketWapper.value.writable.getWriter();
-            await writer.write(chunk);
+		try {
+			const writer = tcpSocket.writable.getWriter();
+            // Pastikan socket siap sebelum menulis (meskipun 'connect' biasanya async)
+            // Cek state mungkin tidak selalu cukup di environment Worker, try-catch lebih aman.
+            await writer.write(rawClientData);
+            log(`Initial client data (${rawClientData.byteLength} bytes) written to ${address}:${port}.`);
             writer.releaseLock();
-            return;
-          }
+            return tcpSocket;
 
+		} catch(writeError) {
+            log(`Error writing initial data to ${address}:${port}:`, writeError);
+             // Coba tutup socket jika gagal menulis data awal
+             try { tcpSocket.close(); } catch(e) {}
+             connectionState.remoteSocket = null; // Hapus dari state jika gagal
+             throw writeError;
+        }
+	}
 
+	/**
+	 * Fungsi untuk menangani mekanisme retry menggunakan Proxy IP.
+	 * @returns {Promise<void>}
+	 */
+	async function retryWithProxy() {
+		if (retried || !connectionState.proxyIP || connectionState.proxyIP === connectionState.address) {
+			log(`Retry condition not met. Retried: ${retried}, ProxyIP: ${connectionState.proxyIP}, Target: ${connectionState.address}`);
+            safeCloseWebSocket(webSocket); // Tidak bisa retry, tutup koneksi
+			throw new Error("Cannot retry connection.");
+		}
 
-          const {
-            hasError,
-            message,
-            portRemote = 443,
-            addressRemote = "",
-            rawDataIndex,
-            cloudflareVersion = new Uint8Array([0, 0]),
-            isUDP,
-          } = await processcloudflareHeader(chunk, userID);
-          address = addressRemote;
-          portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "} `;
-          if (hasError) {
-            // controller.error(message);
-            throw new Error(message); // cf seems has bug, controller.error will not end stream
-            // webSocket.close(1000, message);
-            return;
-          }
-          // if UDP but port not DNS port, close it
-          if (isUDP) {
-            if (portRemote === 53) {
-              isDns = true;
-            } else {
-              // controller.error('UDP proxy only enable for DNS which is port 53');
-              throw new Error("UDP proxy only enable for DNS which is port 53"); // cf seems has bug, controller.error will not end stream
-              return;
-            }
-          }
-          // ["version", "附加信息长度 N"]
-          const cloudflareResponseHeader = new Uint8Array([cloudflareVersion[0], 0]);
-          const rawClientData = chunk.slice(rawDataIndex);
+        retried = true; // Tandai bahwa retry sudah dilakukan
+		log(`Retrying connection using Proxy IP: ${connectionState.proxyIP}:${connectionState.port}...`);
+		try {
+			// Koneksi menggunakan Proxy IP
+            const tcpSocket = await connectAndWrite(connectionState.proxyIP, connectionState.port, true);
+            log(`Retry connection to proxy ${connectionState.proxyIP}:${connectionState.port} successful.`);
+            pipeRemoteSocketToWebSocket(tcpSocket, webSocket, vlessResponseHeader, null, log); // Pipe tanpa opsi retry lagi
+		} catch (retryError) {
+			log(`Retry connection using Proxy IP ${connectionState.proxyIP} failed:`, retryError);
+            safeCloseWebSocket(webSocket); // Gagal retry, tutup koneksi
+            throw retryError; // Leparkan error agar pemanggil tahu
+		}
+	}
 
-          // TODO: support udp here when cf runtime has udp support
-          if (isDns) {
-            const { write } = await handleUDPOutBound(webSocket, cloudflareResponseHeader, log);
-            udpStreamWrite = write;
-            udpStreamWrite(rawClientData);
-            return;
-          }
-          handleTCPOutBound(
-            remoteSocketWapper,
-            addressRemote,
-            portRemote,
-            rawClientData,
-            webSocket,
-            cloudflareResponseHeader,
-            log
-          );
-        },
-        close() {
-          log(`readableWebSocketStream is close`);
-        },
-        abort(reason) {
-          log(`readableWebSocketStream is abort`, JSON.stringify(reason));
-        },
-      })
-    )
-    .catch((err) => {
-      log("readableWebSocketStream pipeTo error", err);
-    });
-
-  return new Response(null, {
-    status: 101,
-    // @ts-ignore
-    webSocket: client,
-  });
+	// --- Coba Koneksi Awal ---
+	try {
+        const tcpSocket = await connectAndWrite(connectionState.address, connectionState.port, false);
+         log(`Initial connection to ${connectionState.address}:${connectionState.port} seems successful. Piping data...`);
+        pipeRemoteSocketToWebSocket(tcpSocket, webSocket, vlessResponseHeader, retryWithProxy, log); // Pipe dengan opsi retry
+	} catch (initialError) {
+        // Jika koneksi awal gagal total, coba langsung retry (jika memungkinkan)
+		log(`Initial connection to ${connectionState.address}:${connectionState.port} failed. Error: ${initialError}. Attempting retry with proxy...`);
+		try {
+            await retryWithProxy();
+        } catch (retryFailedError) {
+             log(`Both initial connection and retry failed.`);
+            // Error sudah di-log di dalam retryWithProxy, tidak perlu throw lagi
+             // Pastikan WebSocket ditutup jika semua upaya gagal
+            safeCloseWebSocket(webSocket);
+        }
+	}
 }
 
+
 /**
- * Checks if a given UUID is present in the API response.
- * @param {string} targetUuid The UUID to search for.
- * @returns {Promise<boolean>} A Promise that resolves to true if the UUID is present in the API response, false otherwise.
+ * Mem-pipe data dari socket remote TCP ke WebSocket client.
+ * Mengimplementasikan mekanisme deteksi 'no incoming data' untuk memicu retry.
+ * @param {import("@cloudflare/workers-types").Socket} remoteSocket - Socket TCP ke tujuan.
+ * @param {import("@cloudflare/workers-types").WebSocket} webSocket - WebSocket server.
+ * @param {Uint8Array | null} vlessResponseHeader - Header VLESS yang akan dikirim pada chunk data pertama.
+ * @param {(() => Promise<void>) | null} retryCallback - Fungsi callback untuk dipanggil jika retry diperlukan.
+ * @param {(info: string, event?: any) => void} log - Fungsi logging.
  */
-async function checkUuidInApiResponse(targetUuid) {
-  // Check if any of the environment variables are empty
+async function pipeRemoteSocketToWebSocket(remoteSocket, webSocket, vlessResponseHeader, retryCallback, log) {
+	let hasIncomingData = false;
+    let responseHeaderSent = false; // Untuk memastikan header hanya dikirim sekali
+    const remoteAddress = `${remoteSocket.remoteAddress}:${remoteSocket.remotePort}`; // Dapatkan alamat remote untuk logging
 
-  try {
-    const apiResponse = await getApiResponse();
-    if (!apiResponse) {
-      return false;
-    }
-    const isUuidInResponse = apiResponse.users.some((user) => user.uuid === targetUuid);
-    return isUuidInResponse;
-  } catch (error) {
-    console.error("Error:", error);
-    return false;
-  }
-}
+	try {
+        await remoteSocket.readable.pipeTo(
+            new WritableStream({
+                start() {
+                    log(`[${remoteAddress}] Started piping remote TCP -> WebSocket.`);
+                },
+                /**
+                 * Menulis chunk data dari socket remote ke WebSocket.
+                 * @param {Uint8Array} chunk - Data chunk.
+                 * @param {WritableStreamDefaultController} controller - Kontroler stream.
+                 */
+                async write(chunk, controller) {
+                    hasIncomingData = true; // Tandai bahwa data telah diterima
 
-async function getApiResponse() {
-	return { users: [] };
-  }
-/**
- * Handles outbound TCP connections.
- *
- * @param {any} remoteSocket
- * @param {string} addressRemote The remote address to connect to.
- * @param {number} portRemote The remote port to connect to.
- * @param {Uint8Array} rawClientData The raw client data to write.
- * @param {any} webSocket The WebSocket to pass the remote socket to.
- * @param {Uint8Array} cloudflareResponseHeader The cloudflare response header.
- * @param {function} log The logging function.
- * @returns {Promise<void>} The remote socket.
- */
-async function handleTCPOutBound(
-  remoteSocket,
-  addressRemote,
-  portRemote,
-  rawClientData,
-  webSocket,
-  cloudflareResponseHeader,
-  log
-) {
-  async function connectAndWrite(address, port) {
-    if (/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?).){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(address)) address = `${atob('d3d3Lg==')}${address}${atob('LnNzbGlwLmlv')}`;
-	/** @type {any} */
-    const tcpSocket = connect({
-      hostname: address,
-      port: port,
-    });
-    remoteSocket.value = tcpSocket;
-    log(`connected to ${address}:${port}`);
-    const writer = tcpSocket.writable.getWriter();
-    await writer.write(rawClientData); // first write, nomal is tls client hello
-    writer.releaseLock();
-    return tcpSocket;
-  }
+                    // Pastikan WebSocket masih terbuka sebelum mengirim
+                    if (webSocket.readyState !== WS_READY_STATE_OPEN) {
+                         log(`[${remoteAddress}] WebSocket is not open (state: ${webSocket.readyState}). Stopping pipe.`);
+                        controller.error(new Error('WebSocket is not open'));
+                        // Kita ingin menghentikan pipe, tapi mungkin tidak perlu close socket remote secara eksplisit di sini, biarkan ditutup oleh sisi lain atau saat cleanup
+                         // Coba close socket remote
+                         // try { remoteSocket.close(); } catch (e) { log(`[${remoteAddress}] Error closing remote socket on WS write failure:`, e); }
+                        return; // Hentikan pemrosesan chunk ini
+                    }
 
-  // if the cf connect tcp socket have no incoming data, we retry to redirect ip
-  async function retry() {
-    const tcpSocket = await connectAndWrite(proxyIP || addressRemote, proxyPort || portRemote);
-    // no matter retry success or not, close websocket
-    tcpSocket.closed
-      .catch((error) => {
-        console.log("retry tcpSocket closed error", error);
-      })
-      .finally(() => {
+                    try {
+                         // Kirim header VLESS bersamaan dengan chunk data pertama
+                        if (vlessResponseHeader && !responseHeaderSent) {
+                            const dataToSend = new Uint8Array(vlessResponseHeader.byteLength + chunk.byteLength);
+                            dataToSend.set(vlessResponseHeader, 0);
+                            dataToSend.set(chunk, vlessResponseHeader.byteLength);
+                             webSocket.send(dataToSend.buffer); // Kirim ArrayBuffer
+                            responseHeaderSent = true; // Tandai header sudah dikirim
+                             log(`[${remoteAddress}] Sent VLESS response header + ${chunk.byteLength} bytes data chunk to WebSocket.`);
+                        } else {
+                             webSocket.send(chunk); // Kirim chunk data biasa (sudah dalam bentuk yang bisa dikirim, biasanya Uint8Array)
+                            // log(`[${remoteAddress}] Sent ${chunk.byteLength} bytes data chunk to WebSocket.`); // Komentar untuk mengurangi log spam
+                        }
+                    } catch (wsSendError) {
+                        log(`[${remoteAddress}] Error sending data to WebSocket:`, wsSendError);
+                        controller.error(wsSendError); // Beri tahu stream ada error
+                        // Tutup juga remote socket jika WebSocket error
+                        try { remoteSocket.close(); } catch (e) { log(`[${remoteAddress}] Error closing remote socket on WS send error:`, e); }
+
+                    }
+                },
+                close() {
+                     log(`[${remoteAddress}] Remote TCP socket readable stream closed. Has incoming data: ${hasIncomingData}. WebSocket state: ${webSocket.readyState}.`);
+                    // Jangan tutup WebSocket dari sini secara default.
+                    // Biasanya, client yang akan menutup WebSocket jika sisi remote menutup koneksi TCP.
+                    // safeCloseWebSocket(webSocket);
+                },
+                abort(reason) {
+                     log(`[${remoteAddress}] Remote TCP socket readable stream aborted:`, reason);
+                    // Jika stream remote dibatalkan (misal karena error), kita juga harus menutup WebSocket.
+                    safeCloseWebSocket(webSocket);
+                    // Coba tutup juga remote socket
+                    try { remoteSocket.close(); } catch (e) { log(`[${remoteAddress}] Error closing remote socket on stream abort:`, e); }
+                },
+            }),
+            { signal: remoteSocket.closed } // Gunakan 'closed' promise sebagai sinyal pembatalan
+        );
+	} catch (error) {
+		// Tangani error yang mungkin terjadi selama proses pipeTo (misalnya jika socket ditutup tiba-tiba)
+        // Abaikan error AbortError karena itu diharapkan jika socket ditutup
+        if (error.name === 'AbortError') {
+             log(`[${remoteAddress}] Pipe remote TCP -> WebSocket aborted (expected on socket close).`);
+        } else {
+            console.error(`[${remoteAddress}] Error piping remote TCP -> WebSocket:`, error);
+             safeCloseWebSocket(webSocket); // Tutup WS jika terjadi error tak terduga
+            try { remoteSocket.close(); } catch (e) { log(`[${remoteAddress}] Error closing remote socket on pipe error:`, e); }
+        }
+
+	}
+
+    // Cek setelah pipe selesai atau gagal: Jika tidak ada data masuk DAN ada callback retry, panggil retry.
+	// Ini menangani kasus di mana koneksi TCP berhasil tapi remote tidak mengirim data (mungkin firewall, dll).
+	if (!hasIncomingData && retryCallback) {
+		log(`[${remoteAddress}] No data received from remote TCP socket. Triggering retry...`);
+		try {
+            await retryCallback();
+        } catch (retryError) {
+             log(`[${remoteAddress}] Retry failed after no data received. Error: ${retryError}`);
+            // Jika retry juga gagal, pastikan WebSocket ditutup.
+             safeCloseWebSocket(webSocket);
+        }
+	} else if (!hasIncomingData) {
+        log(`[${remoteAddress}] No data received from remote TCP socket, and no retry mechanism available.`);
+        // Jika tidak ada data dan tidak bisa retry, tutup koneksi WebSocket.
         safeCloseWebSocket(webSocket);
-      });
-    remoteSocketToWS(tcpSocket, webSocket, cloudflareResponseHeader, null, log);
-  }
-
-  const tcpSocket = await connectAndWrite(addressRemote, portRemote);
-
-  // when remoteSocket is ready, pass to websocket
-  // remote--> ws
-  remoteSocketToWS(tcpSocket, webSocket, cloudflareResponseHeader, retry, log);
+        // Coba tutup remote socket juga
+         try { remoteSocket.close(); } catch (e) { log(`[${remoteAddress}] Error closing remote socket after no data received (no retry):`, e); }
+    }
 }
 
 /**
- *
- * @param {any} webSocketServer
- * @param {string} earlyDataHeader for ws 0rtt
- * @param {(info: string)=> void} log for ws 0rtt
+ * Membuat ReadableStream dari pesan yang diterima WebSocket server.
+ * Juga menangani data awal dari header `sec-websocket-protocol`.
+ * @param {import("@cloudflare/workers-types").WebSocket} webSocketServer - Instance WebSocket dari sisi server.
+ * @param {string} earlyDataHeader - Isi header 'sec-websocket-protocol' (base64 encoded early data).
+ * @param {function} log - Fungsi logging.
+ * @returns {ReadableStream<Uint8Array>} Stream yang bisa dibaca.
  */
 function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
-  let readableStreamCancel = false;
-  const stream = new ReadableStream({
-    start(controller) {
-      webSocketServer.addEventListener("message", (event) => {
-        if (readableStreamCancel) {
-          return;
-        }
-        const message = event.data;
-        controller.enqueue(message);
-      });
+	let controllerRef = null; // Referensi ke controller stream
 
-      // The event means that the client closed the client -> server stream.
-      // However, the server -> client stream is still open until you call close() on the server side.
-      // The WebSocket protocol says that a separate close message must be sent in each direction to fully close the socket.
-      webSocketServer.addEventListener("close", () => {
-        // client send close, need close server
-        // if stream is cancel, skip controller.close
-        safeCloseWebSocket(webSocketServer);
-        if (readableStreamCancel) {
-          return;
-        }
-        controller.close();
-      });
-      webSocketServer.addEventListener("error", (err) => {
-        log("webSocketServer has error");
-        controller.error(err);
-      });
-      // for ws 0rtt
-      const { earlyData, error } = base64ToArrayBuffer(earlyDataHeader);
-      if (error) {
-        controller.error(error);
-      } else if (earlyData) {
-        controller.enqueue(earlyData);
-      }
-    },
+	// Event listener untuk pesan masuk
+	const messageListener = (event) => {
+        // event.data bisa berupa string, ArrayBuffer, Blob. Kita asumsikan ArrayBuffer/Blob untuk VLESS.
+		let data = event.data;
+        if (typeof data === 'string') {
+             log("Warning: Received string data from WebSocket, expected binary. Encoding to Uint8Array.");
+             data = new TextEncoder().encode(data);
+         } else if (data instanceof Blob) {
+             log("Info: Received Blob data, converting to ArrayBuffer.");
+             // Jika data adalah Blob, kita perlu membacanya sebagai ArrayBuffer
+             // Perhatikan ini async, mungkin perlu penanganan khusus jika urutan penting
+             data.arrayBuffer().then(arrayBuffer => {
+                 if (controllerRef && controllerRef.desiredSize > 0) {
+                    controllerRef.enqueue(new Uint8Array(arrayBuffer));
+                } else if (!controllerRef) {
+                    log("Error: Stream controller not available when Blob processing finished.");
+                } else {
+                    log("Warning: Stream buffer full, dropping Blob data.");
+                }
+             }).catch(err => {
+                 log("Error converting Blob to ArrayBuffer:", err);
+                 if (controllerRef) controllerRef.error(err);
+             });
+             return; // Jangan enqueue langsung jika Blob, tunggu konversi selesai
+         } else if (!(data instanceof ArrayBuffer)) {
+            log(`Error: Received unexpected data type from WebSocket: ${typeof data}`);
+            if (controllerRef) controllerRef.error(new TypeError("Unexpected WebSocket data type"));
+            return;
+         }
 
-    pull(controller) {
-      // if ws can stop read if stream is full, we can implement backpressure
-      // https://streams.spec.whatwg.org/#example-rs-push-backpressure
-    },
-    cancel(reason) {
-      // 1. pipe WritableStream has error, this cancel will called, so ws handle server close into here
-      // 2. if readableStream is cancel, all controller.close/enqueue need skip,
-      // 3. but from testing controller.error still work even if readableStream is cancel
-      if (readableStreamCancel) {
-        return;
-      }
-      log(`ReadableStream was canceled, due to ${reason}`);
-      readableStreamCancel = true;
-      safeCloseWebSocket(webSocketServer);
-    },
-  });
+         // Enqueue jika data adalah ArrayBuffer (atau sudah dikonversi dari string)
+         if (controllerRef && controllerRef.desiredSize > 0) { // Cek backpressure
+              controllerRef.enqueue(new Uint8Array(data));
+         } else if (!controllerRef) {
+             log("Error: Stream controller not available.");
+         } else {
+              log(`Warning: WebSocket stream buffer full (desiredSize: ${controllerRef.desiredSize}). Backpressure applied.`);
+              // TODO: Implementasikan mekanisme backpressure yang lebih baik jika diperlukan
+              // Misalnya, stop menerima pesan dari WebSocket untuk sementara?
+         }
 
-  return stream;
+	};
+
+    // Event listener untuk penutupan WebSocket
+	const closeListener = () => {
+		log('WebSocket connection closed by remote.');
+		if (controllerRef) {
+             try {
+                 controllerRef.close(); // Tutup stream jika WebSocket ditutup
+             } catch (e) {
+                 if (e.message.includes("Cannot close a readable stream controller that is closing")) {
+                    // Abaikan error ini, bisa terjadi jika close sudah dipanggil sebelumnya
+                 } else {
+                    log("Error closing stream on WebSocket close:", e);
+                 }
+             }
+         }
+		// Hapus listener untuk mencegah memory leak
+		webSocketServer.removeEventListener('message', messageListener);
+		webSocketServer.removeEventListener('close', closeListener);
+		webSocketServer.removeEventListener('error', errorListener);
+	};
+
+    // Event listener untuk error WebSocket
+	const errorListener = (err) => {
+		log('WebSocket error occurred:', err);
+		if (controllerRef) {
+			controllerRef.error(err); // Sebarkan error ke stream
+		}
+		// Hapus listener
+        webSocketServer.removeEventListener('message', messageListener);
+        webSocketServer.removeEventListener('close', closeListener);
+        webSocketServer.removeEventListener('error', errorListener);
+	};
+
+	return new ReadableStream({
+		start(controller) {
+			controllerRef = controller; // Simpan referensi controller
+
+			// Pasang event listener
+			webSocketServer.addEventListener('message', messageListener);
+			webSocketServer.addEventListener('close', closeListener);
+			webSocketServer.addEventListener('error', errorListener);
+
+			// Proses early data jika ada
+			const { earlyData, error } = base64ToArrayBuffer(earlyDataHeader);
+			if (error) {
+				log("Error decoding early data from sec-websocket-protocol header:", error);
+				controller.error(error);
+			} else if (earlyData && earlyData.byteLength > 0) {
+				log(`Processing ${earlyData.byteLength} bytes of early data.`);
+				controller.enqueue(new Uint8Array(earlyData));
+			}
+		},
+
+		// pull(controller) {
+			// Tarik data jika diperlukan (biasanya tidak untuk WebSocket push source)
+			// Implementasi backpressure bisa ditambahkan di sini jika listener 'message' mendeteksinya
+		// },
+
+		cancel(reason) {
+			log(`WebSocket readable stream cancelled. Reason:`, reason);
+            // Hapus listener saat stream dibatalkan
+            webSocketServer.removeEventListener('message', messageListener);
+            webSocketServer.removeEventListener('close', closeListener);
+            webSocketServer.removeEventListener('error', errorListener);
+            // Tutup WebSocket jika stream dibatalkan oleh konsumen hilir
+			safeCloseWebSocket(webSocketServer);
+		}
+	});
 }
 
-// https://xtls.github.io/development/protocols/cloudflare.html
-// https://github.com/zizifn/excalidraw-backup/blob/main/v2ray-protocol.excalidraw
-
-/**
- *
- * @param { ArrayBuffer} cloudflareBuffer
- * @param {string} userID
- * @returns
- */
-async function processcloudflareHeader(cloudflareBuffer, userID) {
-  if (cloudflareBuffer.byteLength < 24) {
-    return {
-      hasError: true,
-      message: "invalid data",
-    };
-  }
-  const version = new Uint8Array(cloudflareBuffer.slice(0, 1));
-  let isValidUser = false;
-  let isUDP = false;
-  const slicedBuffer = new Uint8Array(cloudflareBuffer.slice(1, 17));
-  const slicedBufferString = stringify(slicedBuffer);
-
-  const uuids = userID.includes(",") ? userID.split(",") : [userID];
-
-  const checkUuidInApi = await checkUuidInApiResponse(slicedBufferString);
-  isValidUser = uuids.some((userUuid) => checkUuidInApi || slicedBufferString === userUuid.trim());
-
-  console.log(`checkUuidInApi: ${await checkUuidInApiResponse(slicedBufferString)}, userID: ${slicedBufferString}`);
-
-  if (!isValidUser) {
-    return {
-      hasError: true,
-      message: "invalid user",
-    };
-  }
-
-  const optLength = new Uint8Array(cloudflareBuffer.slice(17, 18))[0];
-  //skip opt for now
-
-  const command = new Uint8Array(cloudflareBuffer.slice(18 + optLength, 18 + optLength + 1))[0];
-
-  // 0x01 TCP
-  // 0x02 UDP
-  // 0x03 MUX
-  if (command === 1) {
-  } else if (command === 2) {
-    isUDP = true;
-  } else {
-    return {
-      hasError: true,
-      message: `command ${command} is not support, command 01-tcp,02-udp,03-mux`,
-    };
-  }
-  const portIndex = 18 + optLength + 1;
-  const portBuffer = cloudflareBuffer.slice(portIndex, portIndex + 2);
-  // port is big-Endian in raw data etc 80 == 0x005d
-  const portRemote = new DataView(portBuffer).getUint16(0);
-
-  let addressIndex = portIndex + 2;
-  const addressBuffer = new Uint8Array(cloudflareBuffer.slice(addressIndex, addressIndex + 1));
-
-  // 1--> ipv4  addressLength =4
-  // 2--> domain name addressLength=addressBuffer[1]
-  // 3--> ipv6  addressLength =16
-  const addressType = addressBuffer[0];
-  let addressLength = 0;
-  let addressValueIndex = addressIndex + 1;
-  let addressValue = "";
-  switch (addressType) {
-    case 1:
-      addressLength = 4;
-      addressValue = new Uint8Array(cloudflareBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join(".");
-      break;
-    case 2:
-      addressLength = new Uint8Array(cloudflareBuffer.slice(addressValueIndex, addressValueIndex + 1))[0];
-      addressValueIndex += 1;
-      addressValue = new TextDecoder().decode(cloudflareBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
-      break;
-    case 3:
-      addressLength = 16;
-      const dataView = new DataView(cloudflareBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
-      // 2001:0db8:85a3:0000:0000:8a2e:0370:7334
-      const ipv6 = [];
-      for (let i = 0; i < 8; i++) {
-        ipv6.push(dataView.getUint16(i * 2).toString(16));
-      }
-      addressValue = ipv6.join(":");
-      // seems no need add [] for ipv6
-      break;
-    default:
-      return {
-        hasError: true,
-        message: `invild  addressType is ${addressType}`,
-      };
-  }
-  if (!addressValue) {
-    return {
-      hasError: true,
-      message: `addressValue is empty, addressType is ${addressType}`,
-    };
-  }
-
-  return {
-    hasError: false,
-    addressRemote: addressValue,
-    addressType,
-    portRemote,
-    rawDataIndex: addressValueIndex + addressLength,
-    cloudflareVersion: version,
-    isUDP,
-  };
-}
-
-/**
- *
- * @param {any} remoteSocket
- * @param {any} webSocket
- * @param {ArrayBuffer} cloudflareResponseHeader
- * @param {(() => Promise<void>) | null} retry
- * @param {*} log
- */
-async function remoteSocketToWS(remoteSocket, webSocket, cloudflareResponseHeader, retry, log) {
-  // remote--> ws
-  let remoteChunkCount = 0;
-  let chunks = [];
-  /** @type {ArrayBuffer | null} */
-  let cloudflareHeader = cloudflareResponseHeader;
-  let hasIncomingData = false; // check if remoteSocket has incoming data
-  await remoteSocket.readable
-    .pipeTo(
-      new WritableStream({
-        start() {},
-        /**
-         *
-         * @param {Uint8Array} chunk
-         * @param {*} controller
-         */
-        async write(chunk, controller) {
-          hasIncomingData = true;
-          // remoteChunkCount++;
-          if (webSocket.readyState !== WS_READY_STATE_OPEN) {
-            controller.error("webSocket.readyState is not open, maybe close");
-          }
-          if (cloudflareHeader) {
-            webSocket.send(await new Blob([cloudflareHeader, chunk]).arrayBuffer());
-            cloudflareHeader = null;
-          } else {
-            // seems no need rate limit this, CF seems fix this??..
-            // if (remoteChunkCount > 20000) {
-            // 	// cf one package is 4096 byte(4kb),  4096 * 20000 = 80M
-            // 	await delay(1);
-            // }
-            webSocket.send(chunk);
-          }
-        },
-        close() {
-          log(`remoteConnection!.readable is close with hasIncomingData is ${hasIncomingData}`);
-          // safeCloseWebSocket(webSocket); // no need server close websocket frist for some case will casue HTTP ERR_CONTENT_LENGTH_MISMATCH issue, client will send close event anyway.
-        },
-        abort(reason) {
-          console.error(`remoteConnection!.readable abort`, reason);
-        },
-      })
-    )
-    .catch((error) => {
-      console.error(`remoteSocketToWS has exception `, error.stack || error);
-      safeCloseWebSocket(webSocket);
-    });
-
-  // seems is cf connect socket have error,
-  // 1. Socket.closed will have error
-  // 2. Socket.readable will be close without any data coming
-  if (hasIncomingData === false && retry) {
-    log(`retry`);
-    retry();
-  }
-}
-
-/**
- *
- * @param {string} base64Str
- * @returns
- */
-function base64ToArrayBuffer(base64Str) {
-  if (!base64Str) {
-    return { error: null };
-  }
-  try {
-    // go use modified Base64 for URL rfc4648 which js atob not support
-    base64Str = base64Str.replace(/-/g, "+").replace(/_/g, "/");
-    const decode = atob(base64Str);
-    const arryBuffer = Uint8Array.from(decode, (c) => c.charCodeAt(0));
-    return { earlyData: arryBuffer.buffer, error: null };
-  } catch (error) {
-    return { error };
-  }
-}
-
-/**
- * This is not real UUID validation
- * @param {string} uuid
- */
-function isValidUUID(uuid) {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-}
-
+// Konstanta state WebSocket untuk kejelasan
+const WS_READY_STATE_CONNECTING = 0;
 const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
+const WS_READY_STATE_CLOSED = 3;
+
 /**
- * Normally, WebSocket will not has exceptions when close.
- * @param {any} socket
+ * Menutup WebSocket dengan aman, menangani kemungkinan error jika sudah ditutup.
+ * @param {import("@cloudflare/workers-types").WebSocket} socket - WebSocket yang akan ditutup.
+ * @param {number} [code] - Kode penutupan WebSocket (opsional).
+ * @param {string} [reason] - Alasan penutupan (opsional).
  */
-function safeCloseWebSocket(socket) {
-  try {
-    if (socket.readyState === WS_READY_STATE_OPEN || socket.readyState === WS_READY_STATE_CLOSING) {
-      socket.close();
+function safeCloseWebSocket(socket, code, reason) {
+    try {
+        switch (socket.readyState) {
+            case WS_READY_STATE_OPEN:
+            case WS_READY_STATE_CLOSING: // Boleh coba tutup lagi jika sedang closing
+                socket.close(code, reason);
+                break;
+            case WS_READY_STATE_CONNECTING:
+            case WS_READY_STATE_CLOSED:
+                // Tidak perlu melakukan apa-apa jika sedang konek atau sudah tertutup
+                break;
+        }
+    } catch (error) {
+        // Terkadang error bisa terjadi jika socket ditutup secara tidak normal
+        // console.error("Error closing WebSocket (might be acceptable):", error);
     }
-  } catch (error) {
-    console.error("safeCloseWebSocket error", error);
-  }
 }
 
-const byteToHex = [];
-for (let i = 0; i < 256; ++i) {
-  byteToHex.push((i + 256).toString(16).slice(1));
-}
-function unsafeStringify(arr, offset = 0) {
-  return (
-    byteToHex[arr[offset + 0]] +
-    byteToHex[arr[offset + 1]] +
-    byteToHex[arr[offset + 2]] +
-    byteToHex[arr[offset + 3]] +
-    "-" +
-    byteToHex[arr[offset + 4]] +
-    byteToHex[arr[offset + 5]] +
-    "-" +
-    byteToHex[arr[offset + 6]] +
-    byteToHex[arr[offset + 7]] +
-    "-" +
-    byteToHex[arr[offset + 8]] +
-    byteToHex[arr[offset + 9]] +
-    "-" +
-    byteToHex[arr[offset + 10]] +
-    byteToHex[arr[offset + 11]] +
-    byteToHex[arr[offset + 12]] +
-    byteToHex[arr[offset + 13]] +
-    byteToHex[arr[offset + 14]] +
-    byteToHex[arr[offset + 15]]
-  ).toLowerCase();
-}
-function stringify(arr, offset = 0) {
-  const uuid = unsafeStringify(arr, offset);
-  if (!isValidUUID(uuid)) {
-    throw TypeError("Stringified UUID is invalid");
-  }
-  return uuid;
-}
- 
+
 /**
- *
- * @param {any} webSocket
- * @param {ArrayBuffer} cloudflareResponseHeader
- * @param {(string)=> void} log
+ * Memproses header VLESS dari data biner yang diterima.
+ * Referensi: https://xtls.github.io/development/protocols/vless.html
+ * @param {ArrayBuffer} vlessBuffer - Buffer yang berisi data VLESS (minimal header).
+ * @param {string} configuredUserID - UUID atau daftar UUID yang valid, dipisahkan koma.
+ * @returns {{
+ *  hasError: boolean,
+ *  errorReason?: string,
+ *  addressRemote?: string,
+ *  addressType?: number, // 1: IPv4, 2: Domain, 3: IPv6
+ *  portRemote?: number,
+ *  rawDataIndex?: number, // Index awal data payload setelah header
+ *  vlessVersion?: Uint8Array, // Versi VLESS yang terdeteksi
+ *  isUDP?: boolean // Apakah command UDP (0x02) diminta
+ * }} Hasil pemrosesan header.
  */
-async function handleUDPOutBound(webSocket, cloudflareResponseHeader, log) {
-  let iscloudflareHeaderSent = false;
-  const transformStream = new TransformStream({
-    start(controller) {},
-    transform(chunk, controller) {
-      // udp message 2 byte is the the length of udp data
-      // TODO: this should have bug, beacsue maybe udp chunk can be in two websocket message
-      for (let index = 0; index < chunk.byteLength; ) {
-        const lengthBuffer = chunk.slice(index, index + 2);
-        const udpPakcetLength = new DataView(lengthBuffer).getUint16(0);
-        const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPakcetLength));
-        index = index + 2 + udpPakcetLength;
-        controller.enqueue(udpData);
-      }
-    },
-    flush(controller) {},
-  });
+function processVlessHeader(vlessBuffer, configuredUserID) {
+	if (vlessBuffer.byteLength < 24) { // Minimal: 1(ver)+16(uuid)+1(addlen)+1(cmd)+2(port)+1(atype)+1(addr min)
+		return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short (< 24 bytes)' };
+	}
+    const dataView = new DataView(vlessBuffer);
+    const version = new Uint8Array(vlessBuffer.slice(0, 1)); // Ambil versi (byte pertama)
 
-  // only handle dns udp for now
-  transformStream.readable
-    .pipeTo(
-      new WritableStream({
-        async write(chunk) {
-          const resp = await fetch(
-            dohURL, // dns server url
-            {
-              method: "POST",
-              headers: {
-                "content-type": "application/dns-message",
-              },
-              body: chunk,
+	if (version[0] !== 0) {
+		// Saat ini hanya VLESS versi 0 yang didukung secara luas
+        // Mungkin di masa depan perlu menangani versi lain.
+		return { hasError: true, errorReason: `Unsupported VLESS version: ${version[0]}. Only version 0 is supported.` };
+	}
+
+	// Ekstrak UUID (16 bytes setelah versi)
+	const uuidBytes = new Uint8Array(vlessBuffer.slice(1, 17));
+	const receivedUUID = uuidBytesToString(uuidBytes);
+	if (!receivedUUID) {
+		return { hasError: true, errorReason: 'Failed to parse received UUID.' };
+	}
+
+    // Validasi User ID
+	const validUserIDs = configuredUserID.split(',').map(id => id.trim());
+	if (!validUserIDs.includes(receivedUUID)) {
+		console.warn(`Invalid user attempt: ${receivedUUID}. Allowed: ${configuredUserID}`);
+		return { hasError: true, errorReason: `Invalid user: ${receivedUUID}` };
+	}
+
+    // Panjang Addons (saat ini diabaikan)
+	const addonLength = dataView.getUint8(17);
+    const commandIndex = 18 + addonLength; // Index byte command setelah addons
+
+    if (vlessBuffer.byteLength <= commandIndex) {
+		return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for command.' };
+	}
+
+    // Command (1 byte): 0x01=TCP, 0x02=UDP, 0x03=MUX (tidak didukung)
+	const command = dataView.getUint8(commandIndex);
+	let isUDP = false;
+	if (command === 0x01) { // TCP
+		isUDP = false;
+	} else if (command === 0x02) { // UDP
+		isUDP = true;
+	} else {
+		return { hasError: true, errorReason: `Unsupported command: ${command}. Only TCP (1) and UDP (2) are supported.` };
+	}
+
+    // Port (2 bytes, big-endian) setelah command
+    const portIndex = commandIndex + 1;
+     if (vlessBuffer.byteLength < portIndex + 2) {
+		return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for port.' };
+	}
+	const portRemote = dataView.getUint16(portIndex, false); // false = big-endian
+
+    // Address Type (1 byte) setelah port
+	const addressTypeIndex = portIndex + 2;
+     if (vlessBuffer.byteLength <= addressTypeIndex) {
+		return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for address type.' };
+	}
+	const addressType = dataView.getUint8(addressTypeIndex);
+
+	let addressRemote = '';
+	let addressLength = 0;
+	let addressValueIndex = addressTypeIndex + 1; // Index awal nilai alamat
+
+	switch (addressType) {
+		case 0x01: // IPv4 (4 bytes)
+			addressLength = 4;
+            if (vlessBuffer.byteLength < addressValueIndex + addressLength) {
+                return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for IPv4 address.' };
             }
-          );
-          const dnsQueryResult = await resp.arrayBuffer();
-          const udpSize = dnsQueryResult.byteLength;
-          // console.log([...new Uint8Array(dnsQueryResult)].map((x) => x.toString(16)));
-          const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
-          if (webSocket.readyState === WS_READY_STATE_OPEN) {
-            log(`doh success and dns message length is ${udpSize}`);
-            if (iscloudflareHeaderSent) {
-              webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-            } else {
-              webSocket.send(await new Blob([cloudflareResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-              iscloudflareHeaderSent = true;
+			addressRemote = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join('.');
+			break;
+		case 0x02: // Domain Name (1 byte length + N bytes name)
+            if (vlessBuffer.byteLength <= addressValueIndex) { // Minimal perlu byte panjang domain
+                return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for domain length.' };
             }
+			addressLength = dataView.getUint8(addressValueIndex); // Panjang domain
+			addressValueIndex += 1; // Pindah ke awal domain name
+            if (vlessBuffer.byteLength < addressValueIndex + addressLength) {
+                 return { hasError: true, errorReason: `Invalid VLESS header: buffer too short for domain name (expected ${addressLength} bytes).` };
+            }
+            try {
+                 addressRemote = new TextDecoder('utf-8', { fatal: true }) // Gunakan fatal:true untuk menangkap error encoding
+                                 .decode(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            } catch(decodeError) {
+                 return { hasError: true, errorReason: `Failed to decode domain name: ${decodeError}`};
+            }
+
+			break;
+		case 0x03: // IPv6 (16 bytes)
+			addressLength = 16;
+             if (vlessBuffer.byteLength < addressValueIndex + addressLength) {
+                 return { hasError: true, errorReason: 'Invalid VLESS header: buffer too short for IPv6 address.' };
+            }
+			const ipv6Bytes = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            // Format ke string hextet
+            const ipv6Segments = [];
+            for (let i = 0; i < 16; i += 2) {
+                ipv6Segments.push(((ipv6Bytes[i] << 8) | ipv6Bytes[i + 1]).toString(16));
+            }
+			addressRemote = ipv6Segments.join(':');
+            // Pertimbangkan normalisasi/kompresi IPv6 jika perlu, tapi biasanya tidak untuk tujuan koneksi
+			break;
+		default:
+			return { hasError: true, errorReason: `Invalid address type: ${addressType}. Expected 1 (IPv4), 2 (Domain), or 3 (IPv6).` };
+	}
+
+	// Index awal payload data client (setelah alamat)
+	const rawDataIndex = addressValueIndex + addressLength;
+
+    // Lakukan pemeriksaan akhir panjang buffer vs index payload
+    // (Sebenarnya sudah tersirat oleh pemeriksaan di setiap langkah, tapi ini eksplisit)
+     if (vlessBuffer.byteLength < rawDataIndex) {
+          return { hasError: true, errorReason: 'Invalid VLESS header: Calculated raw data index exceeds buffer length.' };
+     }
+
+
+	return {
+		hasError: false,
+		addressRemote,
+		addressType,
+		portRemote,
+		rawDataIndex,
+		vlessVersion: version,
+		isUDP,
+	};
+}
+
+
+// --- Helper Functions ---
+
+/**
+ * Mengubah buffer byte UUID menjadi string UUID standar.
+ * @param {Uint8Array} buffer - Buffer 16-byte UUID.
+ * @returns {string | null} String UUID atau null jika buffer tidak valid.
+ */
+function uuidBytesToString(buffer) {
+    if (!buffer || buffer.byteLength !== 16) {
+		return null; // Buffer harus 16 byte
+	}
+	const hex = Array.from(buffer, byte => byte.toString(16).padStart(2, '0')).join('');
+	// Format: 8-4-4-4-12
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Mengonversi string base64 (standar atau URL-safe) ke ArrayBuffer.
+ * @param {string} base64Str - String base64.
+ * @returns {{ earlyData: ArrayBuffer | null, error: Error | null }} Objek hasil konversi.
+ */
+function base64ToArrayBuffer(base64Str) {
+	if (!base64Str) {
+		return { earlyData: null, error: null };
+	}
+	try {
+		// Normalisasi base64 URL-safe ke standar
+		let normalizedBase64 = base64Str.replace(/-/g, '+').replace(/_/g, '/');
+        // Tambahkan padding jika perlu (browser modern `atob` mungkin tidak memerlukannya)
+        // const padding = normalizedBase64.length % 4;
+        // if (padding) {
+        //     normalizedBase64 += '='.repeat(4 - padding);
+        // }
+
+		const binaryString = atob(normalizedBase64); // Dekode base64 ke string biner
+		const len = binaryString.length;
+		const bytes = new Uint8Array(len);
+		for (let i = 0; i < len; i++) {
+			bytes[i] = binaryString.charCodeAt(i); // Konversi karakter biner ke byte
+		}
+		return { earlyData: bytes.buffer, error: null };
+	} catch (error) {
+        console.error("Base64 decoding error:", error); // Log error untuk debugging
+		return { earlyData: null, error: new Error(`Failed to decode base64 string: ${error.message}`) };
+	}
+}
+
+/**
+ * Memvalidasi apakah string adalah format UUID v4 yang valid.
+ * Regex ini cukup ketat untuk format standar.
+ * @param {string} uuid - String yang akan divalidasi.
+ * @returns {boolean} True jika valid, false jika tidak.
+ */
+function isValidUUID(uuid) {
+    if (!uuid || typeof uuid !== 'string') {
+        return false;
+    }
+    // Regex for UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // where y is 8, 9, A, or B.
+	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+	return uuidRegex.test(uuid);
+}
+
+// --- Fungsi untuk Menghasilkan Konfigurasi & Langganan ---
+const base64EncodedVless = btoa('vless'); // "dmxlc3M="
+const base64EncodedAt = btoa('@');     // "QA=="
+const base64EncodedEd = btoa('EDtunnel'); // Opsional, untuk penanda di nama node
+
+/**
+ * Menghasilkan representasi HTML dari konfigurasi VLESS.
+ * @param {string} userIDs - Satu atau beberapa UUID (dipisahkan koma).
+ * @param {string} hostName - Hostname worker (dari header Host).
+ * @param {string} proxyIPValue - Proxy IP yang akan ditampilkan di konfigurasi alternatif.
+ * @returns {string} String HTML.
+ */
+function getVlessConfig(userIDs, hostName, proxyIPValue) {
+	const userIDArray = userIDs.split(',').map(id => id.trim());
+	const firstUserID = userIDArray[0];
+
+    // Komponen URL VLESS yang umum
+    const commonUrlPart = `:443?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2048`; // Path encode dari "/?ed=2048"
+    const fragmentBase = `#${hostName}`;
+
+	const configs = userIDArray.map((userID) => {
+		const vlessMain = `${base64EncodedVless}://${userID}${base64EncodedAt}${hostName}${commonUrlPart}${fragmentBase}`;
+		const vlessProxy = `${base64EncodedVless}://${userID}${base64EncodedAt}${proxyIPValue}${commonUrlPart}${fragmentBase}-${proxyIPValue}-${base64EncodedEd}`;
+
+		return `
+        <h2>UUID: ${userID}</h2>
+        <button onclick='copyToClipboard("${userID}")'><i class="fa fa-clipboard"></i> Salin UUID</button>
+        <hr>
+        <h4>Konfigurasi Utama (Alamat Host):</h4>
+        <pre>${vlessMain}</pre>
+        <button onclick='copyToClipboard("${vlessMain}")'><i class="fa fa-clipboard"></i> Salin Link Utama</button>
+        <h4>Konfigurasi Alternatif (Alamat Proxy IP):</h4>
+        <p>(Gunakan jika koneksi ke alamat host bermasalah. Alamat IP mungkin berubah.)</p>
+        <pre>${vlessProxy}</pre>
+        <button onclick='copyToClipboard("${vlessProxy}")'><i class="fa fa-clipboard"></i> Salin Link Alternatif</button>
+        <br><br>
+        `;
+	}).join('');
+
+	const subscribeURL = `https://${hostName}/sub/${firstUserID}`;
+    const subscribeURLClash = `https://${hostName}/sub/${firstUserID}?format=clash`; // Contoh parameter untuk Clash
+    const subscribeBestIP = `https://${hostName}/bestip/${firstUserID}`;
+
+	// Link Clash via API converter (contoh)
+    const clashConverterURL = `https://api.v1.mk/sub?target=clash&url=${encodeURIComponent(subscribeURLClash)}&insert=false&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
+
+    // Bagian header HTML
+	const header = `
+      <div style="text-align: center;">
+        <p><img src='https://cloudflare-ipfs.com/ipfs/bafybeigd6i5aavwpr6wvnwuyayklq3omonggta4x2q7kpmgafj357nkcky' alt='EDtunnel Logo' style='max-width: 200px; margin-bottom: 10px;'></p>
+        <b style='font-size: 1.1em;'>Selamat Datang! Ini adalah halaman konfigurasi VLESS.</b><br>
+        <p>Proyek Sumber Terbuka: <a href='https://github.com/3Kmfi6HP/EDtunnel' target='_blank'>EDtunnel di GitHub</a></p>
+        <iframe src='https://ghbtns.com/github-btn.html?user=3Kmfi6HP&repo=EDtunnel&type=star&count=true&size=large' frameborder='0' scrolling='0' width='170' height='30' title='GitHub Stars'></iframe>
+        <hr style="margin: 20px 0;">
+        <h3>Link Langganan (Subscription):</h3>
+        <p><a href='${subscribeURL}' target='_blank'>Link Langganan VLESS Biasa</a></p>
+        <p>(Klik kanan dan salin link jika perlu)</p>
+        <br>
+        <p><strong>Integrasi Aplikasi Client:</strong></p>
+        <p>
+          <a href='clash://install-config?url=${encodeURIComponent(subscribeURLClash)}' target='_blank'>Import ke Clash (Format URL)</a> |
+          <a href='${clashConverterURL}' target='_blank'>Import ke Clash (via Converter)</a> |
+          <a href='v2rayng://install-config?url=${encodeURIComponent(subscribeBestIP)}' target='_blank'>Import ke V2RayNG (Otomatis Best IP)</a>
+        </p>
+         <p>
+          <a href='sing-box://import-remote-profile?url=${encodeURIComponent(subscribeBestIP)}' target='_blank'>Import ke Sing-Box (Otomatis Best IP)</a> |
+          <a href='sn://subscription?url=${encodeURIComponent(subscribeBestIP)}' target='_blank'>Import ke Nekoray/Box (Otomatis Best IP)</a>
+        </p>
+        <p>(Tombol Otomatis Best IP memerlukan layanan eksternal sub.xf.free.hr)</p>
+         <hr style="margin: 20px 0;">
+      </div>`;
+
+	// Head HTML dengan CSS sederhana dan FontAwesome
+	const htmlHead = `
+    <head>
+      <title>EDtunnel: Konfigurasi VLESS</title>
+      <meta charset="UTF-8">
+      <meta name='description' content='Halaman Konfigurasi VLESS dari EDtunnel.'>
+      <meta name='keywords' content='VLESS, Cloudflare, EDtunnel, Worker, Proxy'>
+      <meta name='viewport' content='width=device-width, initial-scale=1'>
+      <meta property='og:title' content='EDtunnel - Konfigurasi VLESS' />
+      <meta property='og:description' content='Hasilkan konfigurasi VLESS menggunakan Cloudflare Worker.' />
+      <meta property='og:url' content='https://${hostName}/' />
+      <meta property='og:site_name' content='EDtunnel Config' />
+      <meta property='og:image' content='https://cloudflare-ipfs.com/ipfs/bafybeigd6i5aavwpr6wvnwuyayklq3omonggta4x2q7kpmgafj357nkcky' />
+	  <meta property='og:type' content='website' />
+	  <meta name='twitter:card' content='summary_large_image' />
+      <meta name='twitter:title' content='EDtunnel - Konfigurasi VLESS' />
+      <meta name='twitter:description' content='Hasilkan konfigurasi VLESS menggunakan Cloudflare Worker.' />
+      <meta name='twitter:url' content='https://${hostName}/' />
+	  <meta name='twitter:image' content='https://cloudflare-ipfs.com/ipfs/bafybeigd6i5aavwpr6wvnwuyayklq3omonggta4x2q7kpmgafj357nkcky' />
+
+      <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: 0 auto; background-color: #f4f4f4; color: #333; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        pre { background-color: #fff; border: 1px solid #ddd; padding: 15px; margin: 10px 0; white-space: pre-wrap; word-wrap: break-word; font-family: "Courier New", Courier, monospace; }
+        h2, h3, h4 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 25px;}
+        hr { border: 0; height: 1px; background: #ddd; }
+        button { background-color: #007bff; color: white; border: none; padding: 8px 15px; text-align: center; text-decoration: none; display: inline-block; font-size: 14px; cursor: pointer; border-radius: 4px; margin: 5px 2px; }
+        button:hover { background-color: #0056b3; }
+        button i { margin-right: 5px; }
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+          body { background-color: #282a36; color: #f8f8f2; }
+          a { color: #bd93f9; }
+          pre { background-color: #44475a; border-color: #6272a4; color: #f8f8f2;}
+          h2, h3, h4 { color: #f8f8f2; border-bottom-color: #44475a; }
+          hr { background: #44475a; }
+          button { background-color: #6272a4; }
+          button:hover { background-color: #50fa7b; }
+        }
+      </style>
+    </head>`;
+
+	// Gabungkan semua bagian menjadi HTML lengkap
+	return `
+    <!DOCTYPE html>
+    <html>
+    ${htmlHead}
+    <body>
+      ${header}
+      <div style="padding-top: 20px;">
+        ${configs}
+      </div>
+      <script>
+        function copyToClipboard(text) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+              alert("Teks berhasil disalin ke clipboard!");
+            }).catch(err => {
+              console.error("Gagal menyalin ke clipboard:", err);
+              // Fallback jika API tidak didukung atau gagal
+              fallbackCopyTextToClipboard(text);
+            });
+          } else {
+            // Fallback untuk browser lama atau environment tidak aman
+            fallbackCopyTextToClipboard(text);
           }
-        },
-      })
-    )
- 
-    .catch((error) => {
-      log("dns udp has error" + error);
-    });
-
-  const writer = transformStream.writable.getWriter();
-
-  return {
-    /**
-     *
-     * @param {Uint8Array} chunk
-     */
-    write(chunk) {
-      writer.write(chunk);
-    },
-  };
+        }
+        function fallbackCopyTextToClipboard(text) {
+           const textArea = document.createElement("textarea");
+           textArea.value = text;
+           textArea.style.position = "fixed"; // Prevent scrolling to bottom of page in MS Edge.
+           textArea.style.left = "-9999px";
+           document.body.appendChild(textArea);
+           textArea.focus();
+           textArea.select();
+           try {
+              const successful = document.execCommand('copy');
+              const msg = successful ? 'berhasil' : 'gagal';
+              alert('Fallback: Teks ' + msg + ' disalin ke clipboard.');
+           } catch (err) {
+              console.error('Fallback: Gagal menyalin', err);
+              alert('Fallback: Gagal menyalin teks.');
+           }
+           document.body.removeChild(textArea);
+        }
+      </script>
+    </body>
+    </html>`;
 }
 
 /**
- *
- * @param {string} userID
- * @param {string | null} hostName
- * @returns {string}
+ * Menghasilkan konten subscription VLESS (satu URL VLESS per baris).
+ * @param {string} userIDs - Satu atau beberapa UUID (dipisahkan koma).
+ * @param {string} hostName - Hostname worker.
+ * @param {string} proxyIPValue - Proxy IP alternatif.
+ * @returns {string} String berisi VLESS URLs, dipisahkan newline.
  */
-function get\u0076\u006c\u0065\u0073\u0073Config(userID, hostName) {
-  const w\u0076\u006c\u0065\u0073\u0073ws = `\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${CDNIP}:8880?encryption=none&security=none&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#${hostName}`;
-  const p\u0076\u006c\u0065\u0073\u0073wstls = `\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${CDNIP}:8443?encryption=none&security=tls&type=ws&host=${hostName}&sni=${hostName}&fp=random&path=%2F%3Fed%3D2560#${hostName}`;
-  const note = `甬哥博客地址：https://ygkkk.blogspot.com\n甬哥YouTube频道：https://www.youtube.com/@ygkkk\n甬哥TG电报群组：https://t.me/ygkkktg\n甬哥TG电报频道：https://t.me/ygkkktgpd\n\nProxyIP全局运行中：${proxyIP}`;
-  const ty = `https://${hostName}/${userID}/ty`
-  const cl = `https://${hostName}/${userID}/cl`
-  const sb = `https://${hostName}/${userID}/sb`
-  const pty = `https://${hostName}/${userID}/pty`
-  const pcl = `https://${hostName}/${userID}/pcl`
-  const psb = `https://${hostName}/${userID}/psb`
+function generateVlessSubscription(userIDs, hostName, proxyIPValue) {
+	const userIDArray = userIDs.split(',').map(id => id.trim());
+	let output = [];
 
-  const wk\u0076\u006c\u0065\u0073\u0073share = btoa(`\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP1}:${PT1}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V1_${IP1}_${PT1}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP2}:${PT2}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V2_${IP2}_${PT2}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP3}:${PT3}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V3_${IP3}_${PT3}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP4}:${PT4}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V4_${IP4}_${PT4}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP5}:${PT5}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V5_${IP5}_${PT5}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP6}:${PT6}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V6_${IP6}_${PT6}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP7}:${PT7}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V7_${IP7}_${PT7}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP8}:${PT8}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V8_${IP8}_${PT8}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP9}:${PT9}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V9_${IP9}_${PT9}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP10}:${PT10}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V10_${IP10}_${PT10}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP11}:${PT11}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V11_${IP11}_${PT11}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP12}:${PT12}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V12_${IP12}_${PT12}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP13}:${PT13}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V13_${IP13}_${PT13}`);
+    // Filter proxyIPValue jika itu adalah array string dari environment (ambil yang pertama sebagai contoh)
+    let effectiveProxyIP = Array.isArray(proxyIPValue) ? proxyIPValue[0] : proxyIPValue;
 
+	// Common parts
+    const commonTlsPart = `?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#`; // TLS via WSS
+    const commonHttpPart = `?encryption=none&security=none&fp=random&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#`; // Non-TLS via WS
 
-  const pg\u0076\u006c\u0065\u0073\u0073share = btoa(`\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP8}:${PT8}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V8_${IP8}_${PT8}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP9}:${PT9}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V9_${IP9}_${PT9}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP10}:${PT10}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V10_${IP10}_${PT10}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP11}:${PT11}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V11_${IP11}_${PT11}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP12}:${PT12}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V12_${IP12}_${PT12}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP13}:${PT13}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V13_${IP13}_${PT13}`);	
+	userIDArray.forEach((userID) => {
+		// --- HTTPS/WSS Nodes ---
+        httpsPorts.forEach(port => {
+            // Node utama (via Hostname)
+             let nodeNameMain = `${hostName}_WSS_${port}`;
+            output.push(`${base64EncodedVless}://${userID}${base64EncodedAt}${hostName}:${port}${commonTlsPart}${encodeURIComponent(nodeNameMain)}`);
 
-	
-  const noteshow = note.replace(/\n/g, '<br>');
-  const displayHtml = `
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-<style>
-.limited-width {
-    max-width: 200px;
-    overflow: auto;
-    word-wrap: break-word;
-}
-</style>
-</head>
-<script>
-function copyToClipboard(text) {
-  const input = document.createElement('textarea');
-  input.style.position = 'fixed';
-  input.style.opacity = 0;
-  input.value = text;
-  document.body.appendChild(input);
-  input.select();
-  document.execCommand('Copy');
-  document.body.removeChild(input);
-  alert('已复制到剪贴板');
-}
-</script>
-`;
-if (hostName.includes("workers.dev")) {
-return `
-<br>
-<br>
-${displayHtml}
-<body>
-<div class="container">
-    <div class="row">
-        <div class="col-md-12">
-            <h1>Cloudflare-workers/pages-\u0076\u006c\u0065\u0073\u0073代理脚本 V25.4.7</h1>
-	    <hr>
-            <p>${noteshow}</p>
-            <hr>
-	    <hr>
-	    <hr>
-            <br>
-            <br>
-            <h3>1：CF-workers-\u0076\u006c\u0065\u0073\u0073+ws节点</h3>
-			<table class="table">
-				<thead>
-					<tr>
-						<th>节点特色：</th>
-						<th>单节点链接如下：</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td class="limited-width">关闭了TLS加密，无视域名阻断</td>
-						<td class="limited-width">${w\u0076\u006c\u0065\u0073\u0073ws}</td>
-						<td><button class="btn btn-primary" onclick="copyToClipboard('${w\u0076\u006c\u0065\u0073\u0073ws}')">点击复制链接</button></td>
-					</tr>
-				</tbody>
-			</table>
-            <h5>客户端参数如下：</h5>
-            <ul>
-                <li>客户端地址(address)：自定义的域名 或者 优选域名 或者 优选IP 或者 反代IP</li>
-                <li>端口(port)：7个http端口可任意选择(80、8080、8880、2052、2082、2086、2095)，或反代IP对应端口</li>
-                <li>用户ID(uuid)：${userID}</li>
-                <li>传输协议(network)：ws 或者 websocket</li>
-                <li>伪装域名(host)：${hostName}</li>
-                <li>路径(path)：/?ed=2560</li>
-		<li>传输安全(TLS)：关闭</li>
-            </ul>
-            <hr>
-			<hr>
-			<hr>
-            <br>
-            <br>
-            <h3>2：CF-workers-\u0076\u006c\u0065\u0073\u0073+ws+tls节点</h3>
-			<table class="table">
-				<thead>
-					<tr>
-						<th>节点特色：</th>
-						<th>单节点链接如下：</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td class="limited-width">启用了TLS加密，<br>如果客户端支持分片(Fragment)功能，建议开启，防止域名阻断</td>
-						<td class="limited-width">${p\u0076\u006c\u0065\u0073\u0073wstls}</td>	
-						<td><button class="btn btn-primary" onclick="copyToClipboard('${p\u0076\u006c\u0065\u0073\u0073wstls}')">点击复制链接</button></td>
-					</tr>
-				</tbody>
-			</table>
-            <h5>客户端参数如下：</h5>
-            <ul>
-                <li>客户端地址(address)：自定义的域名 或者 优选域名 或者 优选IP 或者 反代IP</li>
-                <li>端口(port)：6个https端口可任意选择(443、8443、2053、2083、2087、2096)，或反代IP对应端口</li>
-                <li>用户ID(uuid)：${userID}</li>
-                <li>传输协议(network)：ws 或者 websocket</li>
-                <li>伪装域名(host)：${hostName}</li>
-                <li>路径(path)：/?ed=2560</li>
-                <li>传输安全(TLS)：开启</li>
-                <li>跳过证书验证(allowlnsecure)：false</li>
-			</ul>
-			<hr>
-			<hr>
-			<hr>
-			<br>	
-			<br>
-			<h3>3：聚合通用、Clash-meta、Sing-box订阅链接如下：</h3>
-			<hr>
-			<p>注意：<br>1、默认每个订阅链接包含TLS+非TLS共13个端口节点<br>2、当前workers域名作为订阅链接，需通过代理进行订阅更新<br>3、如使用的客户端不支持分片功能，则TLS节点不可用</p>
-			<hr>
+             // Node alternatif (via Proxy IP) - hanya jika proxy IP berbeda dari hostname
+             if (effectiveProxyIP && effectiveProxyIP !== hostName) {
+                 let nodeNameProxy = `${hostName}_WSS_${port}_${effectiveProxyIP}`;
+                 output.push(`${base64EncodedVless}://${userID}${base64EncodedAt}${effectiveProxyIP}:${port}${commonTlsPart}${encodeURIComponent(nodeNameProxy)}`);
+            }
 
+        });
 
-			<table class="table">
-					<thead>
-						<tr>
-							<th>聚合通用分享链接 (可直接导入客户端)：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${wk\u0076\u006c\u0065\u0073\u0073share}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>
+        // --- HTTP/WS Nodes ---
+         // Hindari menambahkan node HTTP jika hostname adalah .dev atau domain khusus CF lainnya yang hanya HTTPS
+        if (!hostName.endsWith('pages.dev') && !hostName.endsWith('workers.dev')) { // Contoh pengecualian
+            httpPorts.forEach(port => {
+                 // Node utama (via Hostname)
+                 let nodeNameMain = `${hostName}_WS_${port}`;
+                output.push(`${base64EncodedVless}://${userID}${base64EncodedAt}${hostName}:${port}${commonHttpPart}${encodeURIComponent(nodeNameMain)}`);
 
+                 // Node alternatif (via Proxy IP) - hanya jika proxy IP berbeda dari hostname
+                 if (effectiveProxyIP && effectiveProxyIP !== hostName) {
+                    let nodeNameProxy = `${hostName}_WS_${port}_${effectiveProxyIP}`;
+                    output.push(`${base64EncodedVless}://${userID}${base64EncodedAt}${effectiveProxyIP}:${port}${commonHttpPart}${encodeURIComponent(nodeNameProxy)}`);
+                }
+            });
+        }
 
-   
-			<table class="table">
-					<thead>
-						<tr>
-							<th>聚合通用订阅链接：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td class="limited-width">${ty}</td>	
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${ty}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>	
+	});
 
-				<table class="table">
-						<thead>
-							<tr>
-								<th>Clash-meta订阅链接：</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr>
-								<td class="limited-width">${cl}</td>	
-								<td><button class="btn btn-primary" onclick="copyToClipboard('${cl}')">点击复制链接</button></td>
-							</tr>
-						</tbody>
-					</table>
-
-					<table class="table">
-					<thead>
-						<tr>
-							<th>Sing-box订阅链接：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td class="limited-width">${sb}</td>	
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${sb}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>
-				<br>
-				<br>
-        </div>
-    </div>
-</div>
-</body>
-`;
-  } else {
-    return `
-<br>
-<br>
-${displayHtml}
-<body>
-<div class="container">
-    <div class="row">
-        <div class="col-md-12">
-            <h1>Cloudflare-workers/pages-\u0076\u006c\u0065\u0073\u0073代理脚本 V25.4.7</h1>
-			<hr>
-            <p>${noteshow}</p>
-            <hr>
-			<hr>
-			<hr>
-            <br>
-            <br>
-            <h3>1：CF-pages/workers/自定义域-\u0076\u006c\u0065\u0073\u0073+ws+tls节点</h3>
-			<table class="table">
-				<thead>
-					<tr>
-						<th>节点特色：</th>
-						<th>单节点链接如下：</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td class="limited-width">启用了TLS加密，<br>如果客户端支持分片(Fragment)功能，可开启，防止域名阻断</td>
-						<td class="limited-width">${p\u0076\u006c\u0065\u0073\u0073wstls}</td>
-						<td><button class="btn btn-primary" onclick="copyToClipboard('${p\u0076\u006c\u0065\u0073\u0073wstls}')">点击复制链接</button></td>
-					</tr>
-				</tbody>
-			</table>
-            <h5>客户端参数如下：</h5>
-            <ul>
-                <li>客户端地址(address)：自定义的域名 或者 优选域名 或者 优选IP 或者 反代IP</li>
-                <li>端口(port)：6个https端口可任意选择(443、8443、2053、2083、2087、2096)，或反代IP对应端口</li>
-                <li>用户ID(uuid)：${userID}</li>
-                <li>传输协议(network)：ws 或者 websocket</li>
-                <li>伪装域名(host)：${hostName}</li>
-                <li>路径(path)：/?ed=2560</li>
-                <li>传输安全(TLS)：开启</li>
-                <li>跳过证书验证(allowlnsecure)：false</li>
-			</ul>
-            <hr>
-			<hr>
-			<hr>
-            <br>
-            <br>
-			<h3>2：聚合通用、Clash-meta、Sing-box订阅链接如下：</h3>
-			<hr>
-			<p>注意：以下订阅链接仅6个TLS端口节点</p>
-			<hr>
-
-
-			<table class="table">
-					<thead>
-						<tr>
-							<th>聚合通用分享链接 (可直接导入客户端)：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${pg\u0076\u006c\u0065\u0073\u0073share}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>
-
-
-
-			<table class="table">
-					<thead>
-						<tr>
-							<th>聚合通用订阅链接：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td class="limited-width">${pty}</td>	
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${pty}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>	
-
-				<table class="table">
-						<thead>
-							<tr>
-								<th>Clash-meta订阅链接：</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr>
-								<td class="limited-width">${pcl}</td>	
-								<td><button class="btn btn-primary" onclick="copyToClipboard('${pcl}')">点击复制链接</button></td>
-							</tr>
-						</tbody>
-					</table>
-
-					<table class="table">
-					<thead>
-						<tr>
-							<th>Sing-box订阅链接：</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td class="limited-width">${psb}</td>	
-							<td><button class="btn btn-primary" onclick="copyToClipboard('${psb}')">点击复制链接</button></td>
-						</tr>
-					</tbody>
-				</table>
-				<br>
-				<br>
-        </div>
-    </div>
-</div>
-</body>
-`;
-  }
+	return output.join('\n');
 }
 
-function gettyConfig(userID, hostName) {
-	const \u0076\u006c\u0065\u0073\u0073share = btoa(`\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP1}:${PT1}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V1_${IP1}_${PT1}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP2}:${PT2}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V2_${IP2}_${PT2}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP3}:${PT3}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V3_${IP3}_${PT3}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP4}:${PT4}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V4_${IP4}_${PT4}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP5}:${PT5}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V5_${IP5}_${PT5}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP6}:${PT6}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V6_${IP6}_${PT6}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP7}:${PT7}?encryption=none&security=none&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V7_${IP7}_${PT7}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP8}:${PT8}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V8_${IP8}_${PT8}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP9}:${PT9}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V9_${IP9}_${PT9}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP10}:${PT10}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V10_${IP10}_${PT10}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP11}:${PT11}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V11_${IP11}_${PT11}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP12}:${PT12}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V12_${IP12}_${PT12}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP13}:${PT13}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V13_${IP13}_${PT13}`);
-		return `${\u0076\u006c\u0065\u0073\u0073share}`
-	}
+// --- UDP over DoH Handler ---
+/**
+ * Menangani lalu lintas UDP keluar (khusus DNS port 53) dengan meneruskannya melalui DoH.
+ * @param {import("@cloudflare/workers-types").WebSocket} webSocket - WebSocket server.
+ * @param {ArrayBuffer} vlessResponseHeader - Header respons VLESS awal.
+ * @param {string} dohURL - URL resolver DoH.
+ * @param {(info: string, event?: any) => void} log - Fungsi logging.
+ * @returns {Promise<{ write: (chunk: Uint8Array) => void }>} Objek dengan fungsi 'write' untuk menerima chunk UDP dari WebSocket.
+ */
+async function handleUdpOverDoH(webSocket, vlessResponseHeader, dohURL, log) {
+	let vlessHeaderSent = false;
+    let accumulatedData = new Uint8Array(0); // Buffer untuk data UDP parsial
 
-function getclConfig(userID, hostName) {
-return `
-port: 7890
-allow-lan: true
-mode: rule
-log-level: info
-unified-delay: true
-global-client-fingerprint: chrome
-dns:
-  enable: false
-  listen: :53
-  ipv6: true
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
-    - 223.5.5.5
-    - 114.114.114.114
-    - 8.8.8.8
-  nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  fallback:
-    - https://1.0.0.1/dns-query
-    - tls://dns.google
-  fallback-filter:
-    geoip: true
-    geoip-code: CN
-    ipcidr:
-      - 240.0.0.0/4
+	// Transform stream untuk memproses data UDP dari WebSocket
+	// Data UDP di VLESS memiliki prefix panjang 2 byte
+	const transformStream = new TransformStream({
+		transform(chunk, controller) {
+			// Gabungkan data baru dengan sisa data sebelumnya
+             const newData = new Uint8Array(accumulatedData.length + chunk.length);
+             newData.set(accumulatedData, 0);
+             newData.set(chunk, accumulatedData.length);
+             accumulatedData = newData;
 
-proxies:
-- name: CF_V1_${IP1}_${PT1}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP1.replace(/[\[\]]/g, '')}
-  port: ${PT1}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
+			// Proses selama masih ada cukup data untuk header panjang + payload
+            while (accumulatedData.length >= 2) {
+                 const dataView = new DataView(accumulatedData.buffer, accumulatedData.byteOffset, accumulatedData.byteLength);
+                 const expectedLength = dataView.getUint16(0, false); // Panjang payload UDP (Big Endian)
+                 const totalPacketLength = 2 + expectedLength; // Panjang total = header 2 byte + payload
 
-- name: CF_V2_${IP2}_${PT2}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP2.replace(/[\[\]]/g, '')}
-  port: ${PT2}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V3_${IP3}_${PT3}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP3.replace(/[\[\]]/g, '')}
-  port: ${PT3}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V4_${IP4}_${PT4}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP4.replace(/[\[\]]/g, '')}
-  port: ${PT4}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V5_${IP5}_${PT5}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP5.replace(/[\[\]]/g, '')}
-  port: ${PT5}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V6_${IP6}_${PT6}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP6.replace(/[\[\]]/g, '')}
-  port: ${PT6}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V7_${IP7}_${PT7}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP7.replace(/[\[\]]/g, '')}
-  port: ${PT7}
-  uuid: ${userID}
-  udp: false
-  tls: false
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V8_${IP8}_${PT8}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP8.replace(/[\[\]]/g, '')}
-  port: ${PT8}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V9_${IP9}_${PT9}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP9.replace(/[\[\]]/g, '')}
-  port: ${PT9}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V10_${IP10}_${PT10}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP10.replace(/[\[\]]/g, '')}
-  port: ${PT10}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V11_${IP11}_${PT11}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP11.replace(/[\[\]]/g, '')}
-  port: ${PT11}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V12_${IP12}_${PT12}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP12.replace(/[\[\]]/g, '')}
-  port: ${PT12}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V13_${IP13}_${PT13}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP13.replace(/[\[\]]/g, '')}
-  port: ${PT13}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-proxy-groups:
-- name: 负载均衡
-  type: load-balance
-  url: http://www.gstatic.com/generate_204
-  interval: 300
-  proxies:
-    - CF_V1_${IP1}_${PT1}
-    - CF_V2_${IP2}_${PT2}
-    - CF_V3_${IP3}_${PT3}
-    - CF_V4_${IP4}_${PT4}
-    - CF_V5_${IP5}_${PT5}
-    - CF_V6_${IP6}_${PT6}
-    - CF_V7_${IP7}_${PT7}
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-- name: 自动选择
-  type: url-test
-  url: http://www.gstatic.com/generate_204
-  interval: 300
-  tolerance: 50
-  proxies:
-    - CF_V1_${IP1}_${PT1}
-    - CF_V2_${IP2}_${PT2}
-    - CF_V3_${IP3}_${PT3}
-    - CF_V4_${IP4}_${PT4}
-    - CF_V5_${IP5}_${PT5}
-    - CF_V6_${IP6}_${PT6}
-    - CF_V7_${IP7}_${PT7}
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-- name: 🌍选择代理
-  type: select
-  proxies:
-    - 负载均衡
-    - 自动选择
-    - DIRECT
-    - CF_V1_${IP1}_${PT1}
-    - CF_V2_${IP2}_${PT2}
-    - CF_V3_${IP3}_${PT3}
-    - CF_V4_${IP4}_${PT4}
-    - CF_V5_${IP5}_${PT5}
-    - CF_V6_${IP6}_${PT6}
-    - CF_V7_${IP7}_${PT7}
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-rules:
-  - GEOIP,LAN,DIRECT
-  - GEOIP,CN,DIRECT
-  - MATCH,🌍选择代理`
-}
-	
-function getsbConfig(userID, hostName) {
-return `{
-	  "log": {
-		"disabled": false,
-		"level": "info",
-		"timestamp": true
-	  },
-	  "experimental": {
-		"clash_api": {
-		  "external_controller": "127.0.0.1:9090",
-		  "external_ui": "ui",
-		  "external_ui_download_url": "",
-		  "external_ui_download_detour": "",
-		  "secret": "",
-		  "default_mode": "Rule"
+                // Jika data yang terkumpul cukup untuk satu paket penuh
+                if (accumulatedData.length >= totalPacketLength) {
+                    const udpPayload = accumulatedData.slice(2, totalPacketLength);
+                    controller.enqueue(udpPayload); // Kirim payload UDP ke hilir
+                     log(`UDP(DoH): Enqueued DNS query payload (${udpPayload.byteLength} bytes).`);
+                    // Buang paket yang sudah diproses dari buffer akumulasi
+                    accumulatedData = accumulatedData.slice(totalPacketLength);
+                } else {
+                    // Data tidak cukup untuk paket lengkap, tunggu chunk berikutnya
+                    break;
+                }
+            }
+             // `accumulatedData` sekarang berisi sisa data parsial
 		},
-		"cache_file": {
-		  "enabled": true,
-		  "path": "cache.db",
-		  "store_fakeip": true
+		flush(controller) {
+            // Jika masih ada sisa data saat stream ditutup, itu mungkin error atau paket tidak lengkap
+            if (accumulatedData.length > 0) {
+                log(`UDP(DoH): Warning - Flushing stream with ${accumulatedData.length} bytes of unprocessed data.`);
+            }
 		}
-	  },
-	  "dns": {
-		"servers": [
-		  {
-			"tag": "proxydns",
-			"address": "tls://8.8.8.8/dns-query",
-			"detour": "select"
-		  },
-		  {
-			"tag": "localdns",
-			"address": "h3://223.5.5.5/dns-query",
-			"detour": "direct"
-		  },
-		  {
-			"tag": "dns_fakeip",
-			"address": "fakeip"
-		  }
-		],
-		"rules": [
-		  {
-			"outbound": "any",
-			"server": "localdns",
-			"disable_cache": true
-		  },
-		  {
-			"clash_mode": "Global",
-			"server": "proxydns"
-		  },
-		  {
-			"clash_mode": "Direct",
-			"server": "localdns"
-		  },
-		  {
-			"rule_set": "geosite-cn",
-			"server": "localdns"
-		  },
-		  {
-			"rule_set": "geosite-geolocation-!cn",
-			"server": "proxydns"
-		  },
-		  {
-			"rule_set": "geosite-geolocation-!cn",
-			"query_type": [
-			  "A",
-			  "AAAA"
-			],
-			"server": "dns_fakeip"
-		  }
-		],
-		"fakeip": {
-		  "enabled": true,
-		  "inet4_range": "198.18.0.0/15",
-		  "inet6_range": "fc00::/18"
-		},
-		"independent_cache": true,
-		"final": "proxydns"
-	  },
-	  "inbounds": [
-		{
-		  "type": "tun",
-                  "tag": "tun-in",
-		  "address": [
-                    "172.19.0.1/30",
-		    "fd00::1/126"
-      ],
-		  "auto_route": true,
-		  "strict_route": true,
-		  "sniff": true,
-		  "sniff_override_destination": true,
-		  "domain_strategy": "prefer_ipv4"
+	});
+
+	// Writable stream untuk mengirim query DNS ke DoH dan mengirim respons kembali ke WebSocket
+	const dohWritable = new WritableStream({
+		async write(udpPayload) {
+            // Kirim payload UDP (yang merupakan query DNS) ke server DoH
+			try {
+                 log(`UDP(DoH): Sending ${udpPayload.byteLength} byte DNS query to ${dohURL}`);
+				const dohResponse = await fetch(dohURL, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/dns-message' },
+					body: udpPayload, // Kirim payload DNS sebagai body
+				});
+
+				if (!dohResponse.ok) {
+                    // Tangani error dari server DoH
+					log(`UDP(DoH): DoH query failed with status ${dohResponse.status}: ${dohResponse.statusText}`);
+                    // Baca body error jika ada
+                     try {
+                        const errorBody = await dohResponse.text();
+                        log(`UDP(DoH): DoH error body: ${errorBody}`);
+                    } catch (e) {}
+                     // Kita mungkin ingin menutup koneksi atau mengirim indikasi error ke client?
+                     // Untuk sekarang, kita hanya log error dan tidak mengirim apa-apa kembali.
+					return; // Hentikan pemrosesan untuk query ini
+				}
+
+                // Baca respons DNS dari server DoH sebagai ArrayBuffer
+				const dnsQueryResult = await dohResponse.arrayBuffer();
+				const resultLength = dnsQueryResult.byteLength;
+                log(`UDP(DoH): Received ${resultLength} byte DNS response from DoH.`);
+
+                 // Buat prefix panjang 2 byte (Big Endian)
+                const lengthBuffer = new Uint8Array(2);
+                new DataView(lengthBuffer.buffer).setUint16(0, resultLength, false); // false = big-endian
+
+                 // Pastikan WebSocket masih terbuka
+                if (webSocket.readyState === WS_READY_STATE_OPEN) {
+                     // Gabungkan header VLESS (jika belum terkirim), prefix panjang, dan hasil query DNS
+                    let responseBlobParts = [];
+                    if (!vlessHeaderSent) {
+                         responseBlobParts.push(vlessResponseHeader);
+                         vlessHeaderSent = true;
+                    }
+                     responseBlobParts.push(lengthBuffer.buffer); // Kirim ArrayBuffer dari prefix panjang
+                     responseBlobParts.push(dnsQueryResult); // Kirim ArrayBuffer dari hasil DNS
+
+                     webSocket.send(await new Blob(responseBlobParts).arrayBuffer());
+                     log(`UDP(DoH): Sent DNS response (${resultLength} bytes payload) back to WebSocket.`);
+                } else {
+                     log("UDP(DoH): WebSocket closed before DoH response could be sent.");
+                 }
+			} catch (error) {
+				log('UDP(DoH): Error during DoH fetch or processing:', error);
+                // Jika fetch gagal, koneksi WebSocket mungkin sudah/akan ditutup
+                safeCloseWebSocket(webSocket); // Coba tutup WS jika terjadi error DoH
+			}
 		}
-	  ],
-	  "outbounds": [
-		{
-		  "tag": "select",
-		  "type": "selector",
-		  "default": "auto",
-		  "outbounds": [
-			"auto",
-			"CF_V1_${IP1}_${PT1}",
-			"CF_V2_${IP2}_${PT2}",
-			"CF_V3_${IP3}_${PT3}",
-			"CF_V4_${IP4}_${PT4}",
-			"CF_V5_${IP5}_${PT5}",
-			"CF_V6_${IP6}_${PT6}",
-			"CF_V7_${IP7}_${PT7}",
-			"CF_V8_${IP8}_${PT8}",
-			"CF_V9_${IP9}_${PT9}",
-			"CF_V10_${IP10}_${PT10}",
-			"CF_V11_${IP11}_${PT11}",
-			"CF_V12_${IP12}_${PT12}",
-			"CF_V13_${IP13}_${PT13}"
-		  ]
-		},
-		{
-		  "server": "${IP1}",
-		  "server_port": ${PT1},
-		  "tag": "CF_V1_${IP1}_${PT1}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP2}",
-		  "server_port": ${PT2},
-		  "tag": "CF_V2_${IP2}_${PT2}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP3}",
-		  "server_port": ${PT3},
-		  "tag": "CF_V3_${IP3}_${PT3}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP4}",
-		  "server_port": ${PT4},
-		  "tag": "CF_V4_${IP4}_${PT4}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP5}",
-		  "server_port": ${PT5},
-		  "tag": "CF_V5_${IP5}_${PT5}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP6}",
-		  "server_port": ${PT6},
-		  "tag": "CF_V6_${IP6}_${PT6}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP7}",
-		  "server_port": ${PT7},
-		  "tag": "CF_V7_${IP7}_${PT7}",
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{     
-		  "server": "${IP8}",
-		  "server_port": ${PT8},
-		  "tag": "CF_V8_${IP8}_${PT8}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP9}",
-		  "server_port": ${PT9},
-		  "tag": "CF_V9_${IP9}_${PT9}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP10}",
-		  "server_port": ${PT10},
-		  "tag": "CF_V10_${IP10}_${PT10}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP11}",
-		  "server_port": ${PT11},
-		  "tag": "CF_V11_${IP11}_${PT11}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP12}",
-		  "server_port": ${PT12},
-		  "tag": "CF_V12_${IP12}_${PT12}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "server": "${IP13}",
-		  "server_port": ${PT13},
-		  "tag": "CF_V13_${IP13}_${PT13}",
-		  "tls": {
-			"enabled": true,
-			"server_name": "${hostName}",
-			"insecure": false,
-			"utls": {
-			  "enabled": true,
-			  "fingerprint": "chrome"
-			}
-		  },
-		  "packet_encoding": "packetaddr",
-		  "transport": {
-			"headers": {
-			  "Host": [
-				"${hostName}"
-			  ]
-			},
-			"path": "/?ed=2560",
-			"type": "ws"
-		  },
-		  "type": "\u0076\u006c\u0065\u0073\u0073",
-		  "uuid": "${userID}"
-		},
-		{
-		  "tag": "direct",
-		  "type": "direct"
-		},
-		{
-		  "tag": "auto",
-		  "type": "urltest",
-		  "outbounds": [
-			"CF_V1_${IP1}_${PT1}",
-			"CF_V2_${IP2}_${PT2}",
-			"CF_V3_${IP3}_${PT3}",
-			"CF_V4_${IP4}_${PT4}",
-			"CF_V5_${IP5}_${PT5}",
-			"CF_V6_${IP6}_${PT6}",
-			"CF_V7_${IP7}_${PT7}",
-			"CF_V8_${IP8}_${PT8}",
-			"CF_V9_${IP9}_${PT9}",
-			"CF_V10_${IP10}_${PT10}",
-			"CF_V11_${IP11}_${PT11}",
-			"CF_V12_${IP12}_${PT12}",
-			"CF_V13_${IP13}_${PT13}"
-		  ],
-		  "url": "https://www.gstatic.com/generate_204",
-		  "interval": "1m",
-		  "tolerance": 50,
-		  "interrupt_exist_connections": false
-		}
-	  ],
-	  "route": {
-		"rule_set": [
-		  {
-			"tag": "geosite-geolocation-!cn",
-			"type": "remote",
-			"format": "binary",
-			"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs",
-			"download_detour": "select",
-			"update_interval": "1d"
-		  },
-		  {
-			"tag": "geosite-cn",
-			"type": "remote",
-			"format": "binary",
-			"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-cn.srs",
-			"download_detour": "select",
-			"update_interval": "1d"
-		  },
-		  {
-			"tag": "geoip-cn",
-			"type": "remote",
-			"format": "binary",
-			"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
-			"download_detour": "select",
-			"update_interval": "1d"
-		  }
-		],
-		"auto_detect_interface": true,
-		"final": "select",
-		"rules": [
-                         {
-                        "inbound": "tun-in",
-                        "action": "sniff"
-                         },
-                          {
-                        "protocol": "dns",
-                           "action": "hijack-dns"
-                         },
-                        {
-                        "port": 443,
-                        "network": "udp",
-                        "action": "reject"
-                         },
-		  {
-			"clash_mode": "Direct",
-			"outbound": "direct"
-		  },
-		  {
-			"clash_mode": "Global",
-			"outbound": "select"
-		  },
-		  {
-			"rule_set": "geoip-cn",
-			"outbound": "direct"
-		  },
-		  {
-			"rule_set": "geosite-cn",
-			"outbound": "direct"
-		  },
-		  {
-			"ip_is_private": true,
-			"outbound": "direct"
-		  },
-		  {
-			"rule_set": "geosite-geolocation-!cn",
-			"outbound": "select"
-		  }
-		]
-	  },
-	  "ntp": {
-		"enabled": true,
-		"server": "time.apple.com",
-		"server_port": 123,
-		"interval": "30m",
-		"detour": "direct"
-	  }
-	}`
+	});
+
+	// Hubungkan transform stream ke DoH writable stream
+    try {
+         transformStream.readable.pipeTo(dohWritable)
+        .catch(pipeError => {
+              log(`UDP(DoH): Error piping UDP data to DoH handler: ${pipeError}`);
+              safeCloseWebSocket(webSocket); // Tutup WS jika pipe gagal
+        });
+    } catch (streamError) {
+        log(`UDP(DoH): Error setting up UDP processing stream: ${streamError}`);
+        safeCloseWebSocket(webSocket);
+    }
+
+
+	// Kembalikan writer dari transform stream agar bisa menerima data dari WebSocket
+	const writer = transformStream.writable.getWriter();
+	return {
+		/**
+		 * Menulis chunk data UDP (dengan prefix panjang) yang diterima dari WebSocket.
+		 * @param {Uint8Array} chunk - Data chunk dari WebSocket.
+		 */
+		write: (chunk) => {
+            try {
+                 writer.write(chunk);
+            } catch(writeError) {
+                 log(`UDP(DoH): Error writing chunk to UDP processing stream: ${writeError}`);
+                 // Jika penulisan gagal, batalkan writer dan tutup stream/socket
+                 writer.abort(writeError).catch(e => log(`UDP(DoH): Error aborting writer: ${e}`));
+                 safeCloseWebSocket(webSocket);
+            }
+        },
+	};
 }
-
-function getptyConfig(userID, hostName) {
-	const \u0076\u006c\u0065\u0073\u0073share = btoa(`\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP8}:${PT8}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V8_${IP8}_${PT8}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP9}:${PT9}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V9_${IP9}_${PT9}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP10}:${PT10}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V10_${IP10}_${PT10}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP11}:${PT11}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V11_${IP11}_${PT11}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP12}:${PT12}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V12_${IP12}_${PT12}\n\u0076\u006c\u0065\u0073\u0073\u003A//${userID}\u0040${IP13}:${PT13}?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#CF_V13_${IP13}_${PT13}`);	
-		return `${\u0076\u006c\u0065\u0073\u0073share}`
-	}
-	
-function getpclConfig(userID, hostName) {
-return `
-port: 7890
-allow-lan: true
-mode: rule
-log-level: info
-unified-delay: true
-global-client-fingerprint: chrome
-dns:
-  enable: false
-  listen: :53
-  ipv6: true
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  default-nameserver: 
-    - 223.5.5.5
-    - 114.114.114.114
-    - 8.8.8.8
-  nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  fallback:
-    - https://1.0.0.1/dns-query
-    - tls://dns.google
-  fallback-filter:
-    geoip: true
-    geoip-code: CN
-    ipcidr:
-      - 240.0.0.0/4
-
-proxies:
-- name: CF_V8_${IP8}_${PT8}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP8.replace(/[\[\]]/g, '')}
-  port: ${PT8}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V9_${IP9}_${PT9}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP9.replace(/[\[\]]/g, '')}
-  port: ${PT9}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V10_${IP10}_${PT10}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP10.replace(/[\[\]]/g, '')}
-  port: ${PT10}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V11_${IP11}_${PT11}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP11.replace(/[\[\]]/g, '')}
-  port: ${PT11}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V12_${IP12}_${PT12}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP12.replace(/[\[\]]/g, '')}
-  port: ${PT12}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-- name: CF_V13_${IP13}_${PT13}
-  type: \u0076\u006c\u0065\u0073\u0073
-  server: ${IP13.replace(/[\[\]]/g, '')}
-  port: ${PT13}
-  uuid: ${userID}
-  udp: false
-  tls: true
-  network: ws
-  servername: ${hostName}
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}
-
-proxy-groups:
-- name: 负载均衡
-  type: load-balance
-  url: http://www.gstatic.com/generate_204
-  interval: 300
-  proxies:
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-- name: 自动选择
-  type: url-test
-  url: http://www.gstatic.com/generate_204
-  interval: 300
-  tolerance: 50
-  proxies:
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-- name: 🌍选择代理
-  type: select
-  proxies:
-    - 负载均衡
-    - 自动选择
-    - DIRECT
-    - CF_V8_${IP8}_${PT8}
-    - CF_V9_${IP9}_${PT9}
-    - CF_V10_${IP10}_${PT10}
-    - CF_V11_${IP11}_${PT11}
-    - CF_V12_${IP12}_${PT12}
-    - CF_V13_${IP13}_${PT13}
-
-rules:
-  - GEOIP,LAN,DIRECT
-  - GEOIP,CN,DIRECT
-  - MATCH,🌍选择代理`
-}
-		
-function getpsbConfig(userID, hostName) {
-return `{
-		  "log": {
-			"disabled": false,
-			"level": "info",
-			"timestamp": true
-		  },
-		  "experimental": {
-			"clash_api": {
-			  "external_controller": "127.0.0.1:9090",
-			  "external_ui": "ui",
-			  "external_ui_download_url": "",
-			  "external_ui_download_detour": "",
-			  "secret": "",
-			  "default_mode": "Rule"
-			},
-			"cache_file": {
-			  "enabled": true,
-			  "path": "cache.db",
-			  "store_fakeip": true
-			}
-		  },
-		  "dns": {
-			"servers": [
-			  {
-				"tag": "proxydns",
-				"address": "tls://8.8.8.8/dns-query",
-				"detour": "select"
-			  },
-			  {
-				"tag": "localdns",
-				"address": "h3://223.5.5.5/dns-query",
-				"detour": "direct"
-			  },
-			  {
-				"tag": "dns_fakeip",
-				"address": "fakeip"
-			  }
-			],
-			"rules": [
-			  {
-				"outbound": "any",
-				"server": "localdns",
-				"disable_cache": true
-			  },
-			  {
-				"clash_mode": "Global",
-				"server": "proxydns"
-			  },
-			  {
-				"clash_mode": "Direct",
-				"server": "localdns"
-			  },
-			  {
-				"rule_set": "geosite-cn",
-				"server": "localdns"
-			  },
-			  {
-				"rule_set": "geosite-geolocation-!cn",
-				"server": "proxydns"
-			  },
-			  {
-				"rule_set": "geosite-geolocation-!cn",
-				"query_type": [
-				  "A",
-				  "AAAA"
-				],
-				"server": "dns_fakeip"
-			  }
-			],
-			"fakeip": {
-			  "enabled": true,
-			  "inet4_range": "198.18.0.0/15",
-			  "inet6_range": "fc00::/18"
-			},
-			"independent_cache": true,
-			"final": "proxydns"
-		  },
-		  "inbounds": [
-			{
-			  "type": "tun",
-                        "tag": "tun-in",
-		  "address": [
-                    "172.19.0.1/30",
-		    "fd00::1/126"
-      ],
-			  "auto_route": true,
-			  "strict_route": true,
-			  "sniff": true,
-			  "sniff_override_destination": true,
-			  "domain_strategy": "prefer_ipv4"
-			}
-		  ],
-		  "outbounds": [
-			{
-			  "tag": "select",
-			  "type": "selector",
-			  "default": "auto",
-			  "outbounds": [
-				"auto",
-				"CF_V8_${IP8}_${PT8}",
-				"CF_V9_${IP9}_${PT9}",
-				"CF_V10_${IP10}_${PT10}",
-				"CF_V11_${IP11}_${PT11}",
-				"CF_V12_${IP12}_${PT12}",
-				"CF_V13_${IP13}_${PT13}"
-			  ]
-			},
-			{
-			  "server": "${IP8}",
-			  "server_port": ${PT8},
-			  "tag": "CF_V8_${IP8}_${PT8}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "server": "${IP9}",
-			  "server_port": ${PT9},
-			  "tag": "CF_V9_${IP9}_${PT9}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "server": "${IP10}",
-			  "server_port": ${PT10},
-			  "tag": "CF_V10_${IP10}_${PT10}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "server": "${IP11}",
-			  "server_port": ${PT11},
-			  "tag": "CF_V11_${IP11}_${PT11}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "server": "${IP12}",
-			  "server_port": ${PT12},
-			  "tag": "CF_V12_${IP12}_${PT12}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "server": "${IP13}",
-			  "server_port": ${PT13},
-			  "tag": "CF_V13_${IP13}_${PT13}",
-			  "tls": {
-				"enabled": true,
-				"server_name": "${hostName}",
-				"insecure": false,
-				"utls": {
-				  "enabled": true,
-				  "fingerprint": "chrome"
-				}
-			  },
-			  "packet_encoding": "packetaddr",
-			  "transport": {
-				"headers": {
-				  "Host": [
-					"${hostName}"
-				  ]
-				},
-				"path": "/?ed=2560",
-				"type": "ws"
-			  },
-			  "type": "\u0076\u006c\u0065\u0073\u0073",
-			  "uuid": "${userID}"
-			},
-			{
-			  "tag": "direct",
-			  "type": "direct"
-			},
-			{
-			  "tag": "auto",
-			  "type": "urltest",
-			  "outbounds": [
-				"CF_V8_${IP8}_${PT8}",
-				"CF_V9_${IP9}_${PT9}",
-				"CF_V10_${IP10}_${PT10}",
-				"CF_V11_${IP11}_${PT11}",
-				"CF_V12_${IP12}_${PT12}",
-				"CF_V13_${IP13}_${PT13}"
-			  ],
-			  "url": "https://www.gstatic.com/generate_204",
-			  "interval": "1m",
-			  "tolerance": 50,
-			  "interrupt_exist_connections": false
-			}
-		  ],
-		  "route": {
-			"rule_set": [
-			  {
-				"tag": "geosite-geolocation-!cn",
-				"type": "remote",
-				"format": "binary",
-				"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs",
-				"download_detour": "select",
-				"update_interval": "1d"
-			  },
-			  {
-				"tag": "geosite-cn",
-				"type": "remote",
-				"format": "binary",
-				"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-cn.srs",
-				"download_detour": "select",
-				"update_interval": "1d"
-			  },
-			  {
-				"tag": "geoip-cn",
-				"type": "remote",
-				"format": "binary",
-				"url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs",
-				"download_detour": "select",
-				"update_interval": "1d"
-			  }
-			],
-			"auto_detect_interface": true,
-			"final": "select",
-			"rules": [
-                          {
-                         "inbound": "tun-in",
-                          "action": "sniff"
-                          },
-                          {
-                          "protocol": "dns",
-                          "action": "hijack-dns"
-                           },
-                          {
-                           "port": 443,
-                          "network": "udp",
-                          "action": "reject"
-                          },
-			  {
-				"clash_mode": "Direct",
-				"outbound": "direct"
-			  },
-			  {
-				"clash_mode": "Global",
-				"outbound": "select"
-			  },
-			  {
-				"rule_set": "geoip-cn",
-				"outbound": "direct"
-			  },
-			  {
-				"rule_set": "geosite-cn",
-				"outbound": "direct"
-			  },
-			  {
-				"ip_is_private": true,
-				"outbound": "direct"
-			  },
-			  {
-				"rule_set": "geosite-geolocation-!cn",
-				"outbound": "select"
-			  }
-			]
-		  },
-		  "ntp": {
-			"enabled": true,
-			"server": "time.apple.com",
-			"server_port": 123,
-			"interval": "30m",
-			"detour": "direct"
-		  }
-		}`;
-} 
